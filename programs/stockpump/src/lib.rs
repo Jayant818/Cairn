@@ -60,7 +60,8 @@ pub mod stockpump {
         v.bootstrapped = true;
 
         let bump = v.bump;
-        let seeds: &[&[u8]] = &[Vault::SEED, &[bump]];
+        let sleeve0 = ctx.accounts.sleeve0_mint.key();
+        let seeds: &[&[u8]] = &[Vault::SEED, sleeve0.as_ref(), &[bump]];
         mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
@@ -107,7 +108,8 @@ pub mod stockpump {
         v.sleeves[1].held = v.sleeves[1].held.checked_add(r1).ok_or(StockPumpError::MathOverflow)?;
 
         let bump = v.bump;
-        let seeds: &[&[u8]] = &[Vault::SEED, &[bump]];
+        let sleeve0 = ctx.accounts.sleeve0_mint.key();
+        let seeds: &[&[u8]] = &[Vault::SEED, sleeve0.as_ref(), &[bump]];
         mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
@@ -149,7 +151,8 @@ pub mod stockpump {
         )?;
 
         let bump = ctx.accounts.vault.bump;
-        let seeds: &[&[u8]] = &[Vault::SEED, &[bump]];
+        let sleeve0 = ctx.accounts.sleeve0_mint.key();
+        let seeds: &[&[u8]] = &[Vault::SEED, sleeve0.as_ref(), &[bump]];
         if sleeve_mask & 0b01 != 0 {
             transfer_out(&ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
                 &ctx.accounts.vault_ata0, &ctx.accounts.user_ata0,
@@ -251,15 +254,16 @@ pub struct Reconciled { pub idx: u8, pub new_held: u64 }
 pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(init, payer = authority, space = 8 + Vault::INIT_SPACE, seeds = [Vault::SEED], bump)]
+    #[account(init, payer = authority, space = 8 + Vault::INIT_SPACE,
+              seeds = [Vault::SEED, sleeve0_mint.key().as_ref()], bump)]
     pub vault: Account<'info, Vault>,
     /// The program creates the share mint and holds its authority. A deployer-owned share
     /// mint is an unlimited mint against everyone else's deposits.
     #[account(init, payer = authority, mint::decimals = 6, mint::authority = vault,
               mint::freeze_authority = vault, mint::token_program = token_program)]
-    pub share_mint: InterfaceAccount<'info, Mint>,
-    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
-    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    pub share_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub sleeve0_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub sleeve1_mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -269,27 +273,27 @@ pub struct Initialize<'info> {
 pub struct Bootstrap<'info> {
     #[account(mut)]
     pub depositor: Signer<'info>,
-    #[account(mut, seeds = [Vault::SEED], bump = vault.bump,
+    #[account(mut, seeds = [Vault::SEED, sleeve0_mint.key().as_ref()], bump = vault.bump,
               has_one = share_mint, has_one = authority)]
     pub vault: Account<'info, Vault>,
     /// CHECK: bound by has_one = authority on the vault
     pub authority: UncheckedAccount<'info>,
-    #[account(mut)] pub share_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut)] pub share_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
-    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve0_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve1_mint.key() == vault.sleeves[1].mint @ StockPumpError::SleeveMismatch)]
-    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve1_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, token::mint = sleeve0_mint, token::authority = vault)]
-    pub vault_ata0: InterfaceAccount<'info, TokenAccount>,
+    pub vault_ata0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve1_mint, token::authority = vault)]
-    pub vault_ata1: InterfaceAccount<'info, TokenAccount>,
+    pub vault_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve0_mint, token::authority = depositor)]
-    pub user_ata0: InterfaceAccount<'info, TokenAccount>,
+    pub user_ata0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve1_mint, token::authority = depositor)]
-    pub user_ata1: InterfaceAccount<'info, TokenAccount>,
+    pub user_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     /// Dead shares land here, owned by the vault PDA, redeemable by nobody.
     #[account(mut, token::mint = share_mint, token::authority = vault)]
-    pub dead_share_ata: InterfaceAccount<'info, TokenAccount>,
+    pub dead_share_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -297,23 +301,23 @@ pub struct Bootstrap<'info> {
 pub struct Deposit<'info> {
     #[account(mut)]
     pub depositor: Signer<'info>,
-    #[account(mut, seeds = [Vault::SEED], bump = vault.bump, has_one = share_mint)]
+    #[account(mut, seeds = [Vault::SEED, sleeve0_mint.key().as_ref()], bump = vault.bump, has_one = share_mint)]
     pub vault: Account<'info, Vault>,
-    #[account(mut)] pub share_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut)] pub share_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
-    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve0_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve1_mint.key() == vault.sleeves[1].mint @ StockPumpError::SleeveMismatch)]
-    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve1_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, token::mint = sleeve0_mint, token::authority = vault)]
-    pub vault_ata0: InterfaceAccount<'info, TokenAccount>,
+    pub vault_ata0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve1_mint, token::authority = vault)]
-    pub vault_ata1: InterfaceAccount<'info, TokenAccount>,
+    pub vault_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve0_mint, token::authority = depositor)]
-    pub user_ata0: InterfaceAccount<'info, TokenAccount>,
+    pub user_ata0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve1_mint, token::authority = depositor)]
-    pub user_ata1: InterfaceAccount<'info, TokenAccount>,
+    pub user_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = share_mint, token::authority = depositor)]
-    pub depositor_share_ata: InterfaceAccount<'info, TokenAccount>,
+    pub depositor_share_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -321,30 +325,31 @@ pub struct Deposit<'info> {
 pub struct Redeem<'info> {
     #[account(mut)]
     pub redeemer: Signer<'info>,
-    #[account(mut, seeds = [Vault::SEED], bump = vault.bump, has_one = share_mint)]
+    #[account(mut, seeds = [Vault::SEED, sleeve0_mint.key().as_ref()], bump = vault.bump, has_one = share_mint)]
     pub vault: Account<'info, Vault>,
-    #[account(mut)] pub share_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut)] pub share_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
-    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve0_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve1_mint.key() == vault.sleeves[1].mint @ StockPumpError::SleeveMismatch)]
-    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve1_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, token::mint = sleeve0_mint, token::authority = vault)]
-    pub vault_ata0: InterfaceAccount<'info, TokenAccount>,
+    pub vault_ata0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve1_mint, token::authority = vault)]
-    pub vault_ata1: InterfaceAccount<'info, TokenAccount>,
+    pub vault_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve0_mint, token::authority = redeemer)]
-    pub user_ata0: InterfaceAccount<'info, TokenAccount>,
+    pub user_ata0: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = sleeve1_mint, token::authority = redeemer)]
-    pub user_ata1: InterfaceAccount<'info, TokenAccount>,
+    pub user_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = share_mint, token::authority = redeemer)]
-    pub redeemer_share_ata: InterfaceAccount<'info, TokenAccount>,
+    pub redeemer_share_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
 pub struct Reconcile<'info> {
     pub authority: Signer<'info>,
-    #[account(mut, seeds = [Vault::SEED], bump = vault.bump, has_one = authority)]
+    #[account(mut, seeds = [Vault::SEED, vault.sleeves[0].mint.as_ref()], bump = vault.bump,
+              has_one = authority)]
     pub vault: Account<'info, Vault>,
     #[account(token::authority = vault)]
     pub vault_ata: InterfaceAccount<'info, TokenAccount>,

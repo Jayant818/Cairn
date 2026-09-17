@@ -18,8 +18,18 @@ const T22 = TOKEN_2022_PROGRAM_ID;
 const FEE_BPS = 100; // 1%
 
 describe("stockpump vault", () => {
-  anchor.setProvider(anchor.AnchorProvider.env());
-  const provider = anchor.getProvider() as anchor.AnchorProvider;
+  // ⛔ NOT AnchorProvider.env(). Its defaults are commitment "processed" AND preflight
+  // "processed", so the blockhash is fetched against one bank and the transaction is
+  // simulated against another — which surfaces as an intermittent "Blockhash not found"
+  // that looks like validator flakiness and is actually a commitment mismatch. Pin both
+  // ends to "confirmed" so every read in this file sees the write that preceded it.
+  const _env = anchor.AnchorProvider.env();
+  const provider = new anchor.AnchorProvider(
+    new anchor.web3.Connection(_env.connection.rpcEndpoint, "confirmed"),
+    _env.wallet,
+    { commitment: "confirmed", preflightCommitment: "confirmed" },
+  );
+  anchor.setProvider(provider);
   const program = anchor.workspace.stockpump as Program<any>;
   const connection = provider.connection;
   const authority = (provider.wallet as anchor.Wallet).payer;
@@ -50,7 +60,12 @@ describe("stockpump vault", () => {
       transferHookProgram: null, transferFeeBasisPoints: 0,   // USDY: plain
     });
     shareMint = Keypair.generate();
-    [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault")], program.programId);
+    // PDA is seeded on the STOCK sleeve mint, not on b"vault" alone. A singleton vault would
+    // mean one vault per program forever — contradicting "one vault per stock" and making the
+    // v2 multi-stock bucket unrepresentable. It also made this suite un-rerunnable, which is
+    // the only reason the defect surfaced at all.
+    [vault] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), sleeve0.toBuffer()], program.programId);
 
     uAta0 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve0, authority.publicKey, {}, T22);
     uAta1 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve1, authority.publicKey, {}, T22);
@@ -61,14 +76,19 @@ describe("stockpump vault", () => {
   it("initialize REFUSES fee_bps = 0 — the claim is the fee and nothing else", async function () {
     this.timeout(60_000);
     const bad = Keypair.generate();
-    await assert.isRejected(
-      program.methods.initialize(0).accounts({
+    try {
+      await program.methods.initialize(0).accounts({
         authority: authority.publicKey, vault, shareMint: bad.publicKey,
         sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
         tokenProgram: T22, systemProgram: SystemProgram.programId,
-      }).signers([bad]).rpc(),
-      /ZeroFee/,
-    ).catch(async (e: any) => { assert.match(String(e), /ZeroFee|0x/, "expected ZeroFee"); });
+      }).signers([bad]).rpc({ commitment: "confirmed" });
+      assert.fail("initialize accepted fee_bps = 0 — held-per-share would stop rising while every line still ran");
+    } catch (e: any) {
+      assert.match(String(e), /ZeroFee/, `expected ZeroFee, got: ${e}`);
+    }
+    // USER-PROTECTING: the failed init must leave NO vault behind. A half-created vault on a
+    // rejected parameter would be claimable by the next caller at a fee of their choosing.
+    assert.isNull(await connection.getAccountInfo(vault), "rejected initialize left a vault account");
   });
 
   it("initialize gives the SHARE MINT AUTHORITY to the vault PDA, not the deployer", async function () {
@@ -77,7 +97,7 @@ describe("stockpump vault", () => {
       authority: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       tokenProgram: T22, systemProgram: SystemProgram.programId,
-    }).signers([shareMint]).rpc();
+    }).signers([shareMint]).rpc({ commitment: "confirmed" });
 
     const m = await getMint(connection, shareMint.publicKey, "confirmed", T22);
     // USER-PROTECTING: a deployer-held share mint is an unlimited mint against every deposit.
@@ -98,7 +118,7 @@ describe("stockpump vault", () => {
       shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
       deadShareAta, tokenProgram: T22,
-    }).rpc();
+    }).rpc({ commitment: "confirmed" });
 
     const r = await ratios();
     assert.equal(r.held[0], A0, "sleeve 0 held wrong");
@@ -118,7 +138,7 @@ describe("stockpump vault", () => {
         shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
         vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
         deadShareAta, tokenProgram: T22,
-      }).rpc();
+      }).rpc({ commitment: "confirmed" });
       assert.fail("second bootstrap succeeded");
     } catch (e: any) { assert.match(String(e), /AlreadyBootstrapped/); }
   });
@@ -134,7 +154,7 @@ describe("stockpump vault", () => {
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
       depositorShareAta: userShareAta, tokenProgram: T22,
-    }).rpc();
+    }).rpc({ commitment: "confirmed" });
 
     const after = await ratios();
     // VAULT-PROTECTING
@@ -156,7 +176,12 @@ describe("stockpump vault", () => {
 
   it("redeem with sleeve_mask = 0b01 pays ONLY sleeve 0 and still burns the shares", async function () {
     this.timeout(60_000);
-    const shares = 1_000n;
+    // redeem a slice of what the REDEEMER actually holds. The 1,000 dead shares sit in the
+    // vault's own account, not the user's — counting them as redeemable is the mistake the
+    // dead-share design exists to make impossible, and the first draft of this test made it.
+    const heldShares = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
+    assert.isTrue(heldShares > 0n, "depositor holds no shares to redeem");
+    const shares = heldShares / 2n;
     const b0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
     const b1 = (await getAccount(connection, uAta1, "confirmed", T22)).amount;
     const bs = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
@@ -166,7 +191,7 @@ describe("stockpump vault", () => {
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
       redeemerShareAta: userShareAta, tokenProgram: T22,
-    }).rpc();
+    }).rpc({ commitment: "confirmed" });
 
     const a0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
     const a1 = (await getAccount(connection, uAta1, "confirmed", T22)).amount;
@@ -187,7 +212,7 @@ describe("stockpump vault", () => {
           sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
           vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
           redeemerShareAta: userShareAta, tokenProgram: T22,
-        }).rpc();
+        }).rpc({ commitment: "confirmed" });
         assert.fail(`mask ${mask} accepted`);
       } catch (e: any) { assert.match(String(e), /EmptyMask/); }
     }
@@ -200,7 +225,7 @@ describe("stockpump vault", () => {
     try {
       await program.methods.reconcile(0).accounts({
         authority: authority.publicKey, vault, vaultAta: vAta0,
-      }).rpc();
+      }).rpc({ commitment: "confirmed" });
       assert.fail("upward reconcile accepted — donations can now move NAV");
     } catch (e: any) { assert.match(String(e), /ReconcileNotDownward/); }
   });
@@ -213,7 +238,7 @@ describe("stockpump vault", () => {
     try {
       await program.methods.reconcile(0).accounts({
         authority: stranger.publicKey, vault, vaultAta: vAta0,
-      }).signers([stranger]).rpc();
+      }).signers([stranger]).rpc({ commitment: "confirmed" });
       assert.fail("stranger reconciled the vault");
     } catch (e: any) { assert.match(String(e), /ConstraintHasOne|has_one|Unauthorized|2001/); }
   });

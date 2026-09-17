@@ -57,11 +57,12 @@ fn ts_integration_suite() {
                  std::env::var("HOME").unwrap(), std::env::var("PATH").unwrap_or_default()))
             .status().map(|s| s.success()).unwrap_or(false)
     };
-    // `anchor build`, not `cargo build-sbf`: the TS suite resolves the program through
-    // anchor.workspace, which reads target/idl. cargo-mutants runs in a scratch copy that has
-    // no target/, so build-sbf alone deploys a program the tests then cannot find — and the
-    // failure ("ENOENT: scandir target/idl") looks nothing like the missing IDL that it is.
-    assert!(sh("anchor build"), "anchor build failed");
+    // ./build.sh, not `anchor build`: anchor drives cargo-build-sbf with the DEFAULT
+    // platform-tools (v1.51, cargo 1.84) and there is no override — `anchor build --
+    // --tools-version vX` forwards the flag to the IDL's cargo test, which rejects it, while
+    // leaving a stale .so on disk whose hash can still look correct. build.sh does the two
+    // steps explicitly on v1.55 and prints the ELF flags so a codegen change cannot pass quietly.
+    assert!(sh("./build.sh"), "build.sh failed");
     assert!(sh("anchor deploy --provider.cluster http://127.0.0.1:8899"), "deploy failed");
     let home = std::env::var("HOME").unwrap();
     assert!(

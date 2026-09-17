@@ -6,3 +6,6 @@ node_modules
 test-ledger
 .yarn
 mutants.out*/
+fork-ledger/
+fork/*-ata.json
+fork/atas.json

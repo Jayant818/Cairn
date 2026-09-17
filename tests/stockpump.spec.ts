@@ -9,10 +9,10 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
-  TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotent, getAccount, getMint, mintTo,
+  TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotent, getAccount, getMint, mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { createTestMint } from "./mint2022";
+import { createTestMint, createClassicMint } from "./mint2022";
 
 const T22 = TOKEN_2022_PROGRAM_ID;
 const FEE_BPS = 100; // 1%
@@ -55,10 +55,10 @@ describe("stockpump vault", () => {
       decimals: 8, permanentDelegate: authority.publicKey, pausableAuthority: authority.publicKey,
       transferHookProgram: null, transferFeeBasisPoints: 0,   // SPYx: 0 bps
     });
-    sleeve1 = await createTestMint(connection, authority, {
-      decimals: 6, permanentDelegate: null, pausableAuthority: null,
-      transferHookProgram: null, transferFeeBasisPoints: 0,   // USDY: plain
-    });
+    // ⛔ CLASSIC SPL, not Token-2022. USDY is Tokenkeg (82 B) while SPYx is TokenzQd (676 B),
+    // and building both sleeves under one program is what hid the single-token_program defect
+    // for four commits. The local suite now exercises two token programs by default.
+    sleeve1 = await createClassicMint(connection, authority, 6);
     shareMint = Keypair.generate();
     // PDA is seeded on the STOCK sleeve mint, not on b"vault" alone. A singleton vault would
     // mean one vault per program forever — contradicting "one vault per stock" and making the
@@ -68,9 +68,9 @@ describe("stockpump vault", () => {
       [Buffer.from("vault"), sleeve0.toBuffer()], program.programId);
 
     uAta0 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve0, authority.publicKey, {}, T22);
-    uAta1 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve1, authority.publicKey, {}, T22);
+    uAta1 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve1, authority.publicKey, {}, TOKEN_PROGRAM_ID);
     await mintTo(connection, authority, sleeve0, uAta0, authority, 1_000_000_000_000n, [], {}, T22);
-    await mintTo(connection, authority, sleeve1, uAta1, authority, 1_000_000_000_000n, [], {}, T22);
+    await mintTo(connection, authority, sleeve1, uAta1, authority, 1_000_000_000_000n, [], {}, TOKEN_PROGRAM_ID);
   });
 
   it("initialize REFUSES fee_bps = 0 — the claim is the fee and nothing else", async function () {
@@ -105,7 +105,7 @@ describe("stockpump vault", () => {
     assert.notEqual(m.mintAuthority?.toBase58(), authority.publicKey.toBase58());
 
     vAta0 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve0, vault, {}, T22, undefined, true);
-    vAta1 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve1, vault, {}, T22, undefined, true);
+    vAta1 = await createAssociatedTokenAccountIdempotent(connection, authority, sleeve1, vault, {}, TOKEN_PROGRAM_ID, undefined, true);
     deadShareAta = await createAssociatedTokenAccountIdempotent(connection, authority, shareMint.publicKey, vault, {}, T22, undefined, true);
     userShareAta = await createAssociatedTokenAccountIdempotent(connection, authority, shareMint.publicKey, authority.publicKey, {}, T22);
   });
@@ -164,9 +164,9 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
     // proving nothing about the authority gate. A test that stops at the first constraint does
     // not test the constraint it names.
     const sAta0 = await createAssociatedTokenAccountIdempotent(connection, stranger, sleeve0, stranger.publicKey, {}, T22);
-    const sAta1 = await createAssociatedTokenAccountIdempotent(connection, stranger, sleeve1, stranger.publicKey, {}, T22);
+    const sAta1 = await createAssociatedTokenAccountIdempotent(connection, stranger, sleeve1, stranger.publicKey, {}, TOKEN_PROGRAM_ID);
     await mintTo(connection, authority, sleeve0, sAta0, authority, 10_000_000n, [], {}, T22);
-    await mintTo(connection, authority, sleeve1, sAta1, authority, 10_000_000n, [], {}, T22);
+    await mintTo(connection, authority, sleeve1, sAta1, authority, 10_000_000n, [], {}, TOKEN_PROGRAM_ID);
     // ⛔⛔ AND THE STRANGER MUST BE THE FEE PAYER. Anchor's .rpc() pays fees from the provider
     // wallet — which IS the authority here — so the authority signs every transaction anyway and
     // the gate can never be observed to fire. The first isolated version of this test PASSED the
@@ -176,7 +176,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       depositor: stranger.publicKey, vault, authority: authority.publicKey,
       shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: sAta0, userAta1: sAta1,
-      deadShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
+      deadShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
     }).instruction();
     const tx = new anchor.web3.Transaction().add(ix);
     tx.feePayer = stranger.publicKey;
@@ -198,7 +198,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       depositor: authority.publicKey, vault, authority: authority.publicKey,
       shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      deadShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
+      deadShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
     const r = await ratios();
@@ -218,7 +218,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
         depositor: authority.publicKey, vault, authority: authority.publicKey,
         shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
         vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-        deadShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
+        deadShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
       }).rpc({ commitment: "confirmed" });
       assert.fail("second bootstrap succeeded");
     } catch (e: any) { assert.match(String(e), /AlreadyBootstrapped/); }
@@ -234,7 +234,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       depositor: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      depositorShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
+      depositorShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
     const after = await ratios();
@@ -264,18 +264,18 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
     assert.isTrue(heldShares > 0n, "depositor holds no shares to redeem");
     const shares = heldShares / 2n;
     const b0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
-    const b1 = (await getAccount(connection, uAta1, "confirmed", T22)).amount;
+    const b1 = (await getAccount(connection, uAta1, "confirmed", TOKEN_PROGRAM_ID)).amount;
     const bs = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
 
     await program.methods.redeem(new BN(shares.toString()), 0b01).accounts({
       redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
+      redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
     const a0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
-    const a1 = (await getAccount(connection, uAta1, "confirmed", T22)).amount;
+    const a1 = (await getAccount(connection, uAta1, "confirmed", TOKEN_PROGRAM_ID)).amount;
     const as_ = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
     assert.isTrue(a0 > b0, "sleeve 0 not paid");
     assert.equal(a1, b1, "sleeve 1 paid despite being masked out");
@@ -292,7 +292,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
           redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
           sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
           vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-          redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
+          redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
         }).rpc({ commitment: "confirmed" });
         assert.fail(`mask ${mask} accepted`);
       } catch (e: any) { assert.match(String(e), /EmptyMask/); }

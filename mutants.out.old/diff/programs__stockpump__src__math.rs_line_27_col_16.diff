@@ -1,0 +1,21 @@
+--- programs/stockpump/src/math.rs
++++ replace == with != in apply_fee
+@@ -19,17 +19,17 @@
+ //! loop extract the rounding error.
+ 
+ use crate::errors::StockPumpError;
+ 
+ pub const BPS_DENOM: u128 = 10_000;
+ 
+ /// Split `amount` into `(net, fee)`. Fee rounds UP so the skim is never less than fee_bps.
+ pub fn apply_fee(amount: u64, fee_bps: u16) -> Result<(u64, u64), StockPumpError> {
+-    if fee_bps == 0 {
++    if fee_bps != /* ~ changed by cargo-mutants ~ */ 0 {
+         return Err(StockPumpError::ZeroFee);
+     }
+     if fee_bps as u128 >= BPS_DENOM {
+         return Err(StockPumpError::FeeTooLarge);
+     }
+     let a = amount as u128;
+     // div_ceil: the vault keeps the rounding, never the user.
+     let fee = (a * fee_bps as u128).div_ceil(BPS_DENOM);

@@ -1,0 +1,10 @@
+programs/stockpump/src/math.rs:51:5: replace shares_for_deposit -> Result<u64, StockPumpError> with Ok(1)
+programs/stockpump/src/math.rs:51:35: replace || with && in shares_for_deposit
+programs/stockpump/src/math.rs:51:19: replace != with == in shares_for_deposit
+programs/stockpump/src/math.rs:56:15: replace == with != in shares_for_deposit
+programs/stockpump/src/math.rs:62:13: replace / with * in shares_for_deposit
+programs/stockpump/src/math.rs:70:10: replace == with != in shares_for_deposit
+programs/stockpump/src/math.rs:83:20: replace || with && in payout_for_redeem
+programs/stockpump/src/math.rs:83:30: replace > with == in payout_for_redeem
+programs/stockpump/src/math.rs:83:30: replace > with >= in payout_for_redeem
+programs/stockpump/src/math.rs:92:26: replace - with / in payout_for_redeem

@@ -1,0 +1,21 @@
+--- programs/stockpump/src/math.rs
++++ replace / with % in shares_for_deposit
+@@ -54,17 +54,17 @@
+     let mut best: Option<u64> = None;
+     for (h, n) in held.iter().zip(net_in.iter()) {
+         if *h == 0 {
+             return Err(StockPumpError::EmptySleeve);
+         }
+         let m = (supply as u128)
+             .checked_mul(*n as u128)
+             .ok_or(StockPumpError::MathOverflow)?
+-            / (*h as u128);
++            % /* ~ changed by cargo-mutants ~ */ (*h as u128);
+         let m = u64::try_from(m).map_err(|_| StockPumpError::MathOverflow)?;
+         best = Some(match best {
+             None => m,
+             Some(b) => b.min(m),
+         });
+     }
+     let m = best.ok_or(StockPumpError::SleeveMismatch)?;
+     if m == 0 {

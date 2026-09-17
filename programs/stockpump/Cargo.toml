@@ -23,6 +23,10 @@ custom-panic = []
 [dependencies]
 anchor-lang = "0.32.1"
 
+[dev-dependencies]
+# host-side only: never reaches the SBF build, which pins rustc 1.84.1 against a 1.93.0 host
+proptest = "1.11"
+
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

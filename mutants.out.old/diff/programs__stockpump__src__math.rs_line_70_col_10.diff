@@ -1,0 +1,21 @@
+--- programs/stockpump/src/math.rs
++++ replace == with != in shares_for_deposit
+@@ -62,17 +62,17 @@
+             / (*h as u128);
+         let m = u64::try_from(m).map_err(|_| StockPumpError::MathOverflow)?;
+         best = Some(match best {
+             None => m,
+             Some(b) => b.min(m),
+         });
+     }
+     let m = best.ok_or(StockPumpError::SleeveMismatch)?;
+-    if m == 0 {
++    if m != /* ~ changed by cargo-mutants ~ */ 0 {
+         return Err(StockPumpError::DepositTooSmall);
+     }
+     Ok(m)
+ }
+ 
+ /// Pro-rata payout less the fee, floored on every leg.
+ pub fn payout_for_redeem(
+     supply: u64,

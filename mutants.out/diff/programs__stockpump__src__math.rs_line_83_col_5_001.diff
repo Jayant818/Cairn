@@ -1,0 +1,41 @@
+--- programs/stockpump/src/math.rs
++++ replace payout_for_redeem -> Result<Vec<u64>, StockPumpError> with Ok(vec![0])
+@@ -75,37 +75,17 @@
+ 
+ /// Pro-rata payout less the fee, floored on every leg.
+ pub fn payout_for_redeem(
+     supply: u64,
+     held: &[u64],
+     shares: u64,
+     fee_bps: u16,
+ ) -> Result<Vec<u64>, StockPumpError> {
+-    if shares == 0 || shares > supply {
+-        return Err(StockPumpError::BadShareAmount);
+-    }
+-    if fee_bps == 0 {
+-        return Err(StockPumpError::ZeroFee);
+-    }
+-    if fee_bps as u128 >= BPS_DENOM {
+-        return Err(StockPumpError::FeeTooLarge);
+-    }
+-    let keep = BPS_DENOM - fee_bps as u128;
+-    held.iter()
+-        .map(|h| {
+-            let v = (*h as u128)
+-                .checked_mul(shares as u128)
+-                .ok_or(StockPumpError::MathOverflow)?
+-                .checked_mul(keep)
+-                .ok_or(StockPumpError::MathOverflow)?
+-                / (supply as u128 * BPS_DENOM);
+-            u64::try_from(v).map_err(|_| StockPumpError::MathOverflow)
+-        })
+-        .collect()
++    Ok(vec![0]) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use proptest::prelude::*;
+ 
+     /// held_i/supply compared without floats: a/b >= c/d  <=>  a*d >= c*b, in u128.

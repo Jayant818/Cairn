@@ -1,0 +1,2 @@
+programs/stockpump/src/math.rs:30:24: replace >= with < in apply_fee
+programs/stockpump/src/math.rs:89:24: replace >= with < in payout_for_redeem

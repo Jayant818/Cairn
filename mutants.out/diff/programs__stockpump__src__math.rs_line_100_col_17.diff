@@ -1,0 +1,21 @@
+--- programs/stockpump/src/math.rs
++++ replace / with % in payout_for_redeem
+@@ -92,17 +92,17 @@
+     let keep = BPS_DENOM - fee_bps as u128;
+     held.iter()
+         .map(|h| {
+             let v = (*h as u128)
+                 .checked_mul(shares as u128)
+                 .ok_or(StockPumpError::MathOverflow)?
+                 .checked_mul(keep)
+                 .ok_or(StockPumpError::MathOverflow)?
+-                / (supply as u128 * BPS_DENOM);
++                % /* ~ changed by cargo-mutants ~ */ (supply as u128 * BPS_DENOM);
+             u64::try_from(v).map_err(|_| StockPumpError::MathOverflow)
+         })
+         .collect()
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;

@@ -1,0 +1,21 @@
+--- programs/stockpump/src/math.rs
++++ replace || with && in payout_for_redeem
+@@ -75,17 +75,17 @@
+ 
+ /// Pro-rata payout less the fee, floored on every leg.
+ pub fn payout_for_redeem(
+     supply: u64,
+     held: &[u64],
+     shares: u64,
+     fee_bps: u16,
+ ) -> Result<Vec<u64>, StockPumpError> {
+-    if shares == 0 || shares > supply {
++    if shares == 0 && /* ~ changed by cargo-mutants ~ */ shares > supply {
+         return Err(StockPumpError::BadShareAmount);
+     }
+     if fee_bps == 0 {
+         return Err(StockPumpError::ZeroFee);
+     }
+     if fee_bps as u128 >= BPS_DENOM {
+         return Err(StockPumpError::FeeTooLarge);
+     }

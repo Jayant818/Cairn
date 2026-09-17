@@ -1,0 +1,414 @@
+
+*** programs/stockpump/src/math.rs:51:5: replace shares_for_deposit -> Result<u64, StockPumpError> with Ok(1)
+
+*** mutation diff:
+--- programs/stockpump/src/math.rs
++++ replace shares_for_deposit -> Result<u64, StockPumpError> with Ok(1)
+@@ -43,39 +43,17 @@
+ /// Shares for a proportional in-kind deposit: `min_i(supply * net_in_i / held_i)`.
+ /// The minimum is what makes an off-ratio deposit safe — the short leg binds, and the
+ /// excess on every other leg stays in the vault (Uniswap V2 behaviour).
+ pub fn shares_for_deposit(
+     supply: u64,
+     held: &[u64],
+     net_in: &[u64],
+ ) -> Result<u64, StockPumpError> {
+-    if held.len() != net_in.len() || held.is_empty() {
+-        return Err(StockPumpError::SleeveMismatch);
+-    }
+-    let mut best: Option<u64> = None;
+-    for (h, n) in held.iter().zip(net_in.iter()) {
+-        if *h == 0 {
+-            return Err(StockPumpError::EmptySleeve);
+-        }
+-        let m = (supply as u128)
+-            .checked_mul(*n as u128)
+-            .ok_or(StockPumpError::MathOverflow)?
+-            / (*h as u128);
+-        let m = u64::try_from(m).map_err(|_| StockPumpError::MathOverflow)?;
+-        best = Some(match best {
+-            None => m,
+-            Some(b) => b.min(m),
+-        });
+-    }
+-    let m = best.ok_or(StockPumpError::SleeveMismatch)?;
+-    if m == 0 {
+-        return Err(StockPumpError::DepositTooSmall);
+-    }
+-    Ok(m)
++    Ok(1) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Pro-rata payout less the fee, floored on every leg.
+ pub fn payout_for_redeem(
+     supply: u64,
+     held: &[u64],
+     shares: u64,
+     fee_bps: u16,
+
+
+*** /home/jayant/.rustup/toolchains/1.89.0-x86_64-unknown-linux-gnu/bin/cargo test --no-run --verbose --package=stockpump@0.1.0
+       Fresh unicode-ident v1.0.26
+       Fresh cfg-if v1.0.5
+       Fresh proc-macro2 v1.0.107
+       Fresh version_check v0.9.5
+       Fresh typenum v1.20.1
+       Fresh cpufeatures v0.2.17
+       Fresh winnow v1.0.4
+       Fresh autocfg v1.5.1
+       Fresh equivalent v1.0.2
+       Fresh hashbrown v0.17.1
+       Fresh toml_datetime v1.1.1+spec-1.1.0
+       Fresh semver v1.0.28
+       Fresh five8_core v0.1.2
+       Fresh cfg_aliases v0.2.2
+       Fresh quote v1.0.47
+       Fresh serde_core v1.0.229
+       Fresh indexmap v2.14.2
+       Fresh toml_parser v1.1.3+spec-1.1.0
+       Fresh rustc_version v0.4.1
+       Fresh five8 v0.2.1
+       Fresh solana-sanitize v2.2.1
+       Fresh once_cell v1.21.4
+       Fresh solana-atomic-u64 v2.2.1
+       Fresh syn v3.0.6
+       Fresh syn v1.0.109
+       Fresh syn v2.0.119
+       Fresh zerocopy v0.8.57
+       Fresh toml_edit v0.25.15+spec-1.1.0
+       Fresh subtle v2.6.1
+       Fresh zeroize v1.9.0
+       Fresh rand_core v0.6.4
+       Fresh five8_const v0.1.4
+       Fresh memchr v2.8.3
+       Fresh serde_derive v1.0.229
+       Fresh generic-array v0.14.7
+       Fresh borsh-derive-internal v0.10.4
+       Fresh bytemuck_derive v1.12.1
+       Fresh proc-macro-crate v3.5.0
+       Fresh borsh-schema-derive-internal v0.10.4
+       Fresh ahash v0.8.12
+       Fresh num-traits v0.2.19
+       Fresh curve25519-dalek-derive v0.1.1
+       Fresh zmij v1.0.23
+       Fresh itoa v1.0.18
+       Fresh bs58 v0.5.1
+       Fresh unicode-segmentation v1.13.3
+       Fresh serde v1.0.229
+       Fresh block-buffer v0.10.4
+       Fresh crypto-common v0.1.7
+       Fresh bytemuck v1.25.2
+       Fresh borsh-derive v1.8.1
+       Fresh hashbrown v0.13.2
+       Fresh solana-decode-error v2.3.0
+       Fresh serde_json v1.0.151
+       Fresh heck v0.3.3
+       Fresh thiserror-impl v1.0.69
+       Fresh solana-msg v2.2.1
+       Fresh solana-sdk-macro v2.2.1
+       Fresh solana-program-memory v2.3.1
+       Fresh bitflags v2.13.2
+       Fresh digest v0.10.7
+       Fresh toml v0.5.11
+       Fresh solana-hash v2.3.0
+       Fresh borsh v1.8.1
+       Fresh bincode v1.3.3
+       Fresh anyhow v1.0.104
+       Fresh thiserror v1.0.69
+       Fresh feature-probe v0.1.1
+       Fresh linux-raw-sys v0.12.1
+       Fresh log v0.4.34
+       Fresh serde_bytes v0.11.19
+       Fresh base64 v0.22.1
+       Fresh lazy_static v1.5.0
+       Fresh sha2 v0.10.9
+       Fresh proc-macro-crate v0.1.5
+       Fresh curve25519-dalek v4.1.3
+       Fresh libc v0.2.189
+       Fresh anchor-lang-idl-spec v0.1.0
+       Fresh solana-fee-calculator v2.2.1
+       Fresh fastrand v2.5.0
+       Fresh solana-define-syscall v2.3.0
+       Fresh anchor-derive-space v0.32.2
+       Fresh ppv-lite86 v0.2.21
+       Fresh bit-vec v0.8.0
+       Fresh quick-error v1.2.3
+       Fresh fnv v1.0.7
+       Fresh borsh-derive v0.10.4
+       Fresh solana-sha256-hasher v2.3.0
+       Fresh anchor-syn v0.32.2
+       Fresh getrandom v0.3.4
+       Fresh getrandom v0.4.3
+       Fresh anchor-lang-idl v0.1.4
+       Fresh rustix v1.1.5
+       Fresh wait-timeout v0.2.1
+       Fresh base64 v0.21.7
+       Fresh solana-program-option v2.2.1
+       Fresh bit-set v0.8.0
+       Fresh regex-syntax v0.8.11
+       Fresh unarray v0.1.4
+       Fresh borsh v0.10.4
+       Fresh bv v0.11.1
+       Fresh rand_core v0.9.5
+       Fresh anchor-attribute-account v0.32.2
+       Fresh anchor-attribute-constant v0.32.2
+       Fresh anchor-derive-serde v0.32.2
+       Fresh anchor-attribute-access-control v0.32.2
+       Fresh anchor-derive-accounts v0.32.2
+       Fresh anchor-attribute-event v0.32.2
+       Fresh anchor-attribute-program v0.32.2
+       Fresh anchor-attribute-error v0.32.2
+       Fresh tempfile v3.27.0
+       Fresh solana-pubkey v2.4.0
+       Fresh rand v0.9.5
+       Fresh rand_chacha v0.9.0
+       Fresh rand_xorshift v0.4.0
+       Fresh rusty-fork v0.3.1
+       Fresh solana-sdk-ids v2.2.1
+       Fresh solana-instruction v2.3.3
+       Fresh proptest v1.11.0
+       Fresh solana-sysvar-id v2.2.1
+       Fresh solana-program-error v2.2.2
+       Fresh solana-system-interface v1.0.0
+       Fresh solana-serialize-utils v2.2.1
+       Fresh solana-stable-layout v2.2.1
+       Fresh solana-feature-gate-interface v2.2.2
+       Fresh solana-account-info v2.3.0
+       Fresh solana-clock v2.2.3
+       Fresh solana-epoch-schedule v2.2.1
+       Fresh solana-epoch-rewards v2.2.1
+       Fresh solana-slot-hashes v2.2.1
+       Fresh solana-last-restart-slot v2.2.1
+       Fresh solana-rent v2.2.1
+       Fresh solana-slot-history v2.2.1
+       Fresh solana-loader-v3-interface v3.0.0
+       Fresh solana-program-pack v2.2.1
+       Fresh solana-cpi v2.2.1
+       Fresh solana-program-entrypoint v2.3.0
+       Fresh solana-instructions-sysvar v2.2.2
+       Fresh solana-stake-interface v1.2.1
+       Fresh solana-invoke v0.4.0
+       Fresh solana-sysvar v2.3.0
+       Fresh anchor-lang v0.32.2
+       Dirty stockpump v0.1.0 (/tmp/cargo-mutants-stockpump-ZbncvV.tmp/programs/stockpump): the file `programs/stockpump/src/math.rs` has changed (1789663998.326008024s, 1s after last build at 1789663997.305840452s)
+   Compiling stockpump v0.1.0 (/tmp/cargo-mutants-stockpump-ZbncvV.tmp/programs/stockpump)
+     Running `/home/jayant/.rustup/toolchains/1.89.0-x86_64-unknown-linux-gnu/bin/rustc --crate-name stockpump --edition=2021 programs/stockpump/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --warn=unexpected_cfgs --check-cfg 'cfg(target_os, values("solana"))' --test --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("anchor-debug", "cpi", "custom-heap", "custom-panic", "default", "idl-build", "no-entrypoint", "no-idl", "no-log-ix-name"))' -C metadata=42e05d692f76267d -C extra-filename=-a9825ce1461bf23e --out-dir /tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps -C incremental=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/incremental -L dependency=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps --extern anchor_lang=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/libanchor_lang-1b951aa7a3ef3423.rlib --extern proptest=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/libproptest-0fdcac4bd4541ef2.rlib`
+     Running `/home/jayant/.rustup/toolchains/1.89.0-x86_64-unknown-linux-gnu/bin/rustc --crate-name stockpump --edition=2021 programs/stockpump/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type cdylib --crate-type lib --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --warn=unexpected_cfgs --check-cfg 'cfg(target_os, values("solana"))' --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("anchor-debug", "cpi", "custom-heap", "custom-panic", "default", "idl-build", "no-entrypoint", "no-idl", "no-log-ix-name"))' -C metadata=206dbb7cbc0b4b75 --out-dir /tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps -C incremental=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/incremental -L dependency=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps --extern anchor_lang=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/libanchor_lang-1b951aa7a3ef3423.rlib`
+warning: unused variable: `supply`
+  --> programs/stockpump/src/math.rs:47:5
+   |
+47 |     supply: u64,
+   |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_supply`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `held`
+  --> programs/stockpump/src/math.rs:48:5
+   |
+48 |     held: &[u64],
+   |     ^^^^ help: if this is intentional, prefix it with an underscore: `_held`
+
+warning: unused variable: `net_in`
+  --> programs/stockpump/src/math.rs:49:5
+   |
+49 |     net_in: &[u64],
+   |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_net_in`
+
+warning: `stockpump` (lib) generated 3 warnings (3 duplicates)
+warning: `stockpump` (lib test) generated 3 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+  Executable `/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/stockpump-a9825ce1461bf23e`
+
+*** result: Success
+
+*** /home/jayant/.rustup/toolchains/1.89.0-x86_64-unknown-linux-gnu/bin/cargo test --verbose --package=stockpump@0.1.0
+       Fresh unicode-ident v1.0.26
+       Fresh cfg-if v1.0.5
+       Fresh version_check v0.9.5
+       Fresh proc-macro2 v1.0.107
+       Fresh typenum v1.20.1
+       Fresh cpufeatures v0.2.17
+       Fresh hashbrown v0.17.1
+       Fresh winnow v1.0.4
+       Fresh autocfg v1.5.1
+       Fresh equivalent v1.0.2
+       Fresh toml_datetime v1.1.1+spec-1.1.0
+       Fresh semver v1.0.28
+       Fresh five8_core v0.1.2
+       Fresh quote v1.0.47
+       Fresh serde_core v1.0.229
+       Fresh indexmap v2.14.2
+       Fresh toml_parser v1.1.3+spec-1.1.0
+       Fresh rustc_version v0.4.1
+       Fresh cfg_aliases v0.2.2
+       Fresh five8 v0.2.1
+       Fresh solana-sanitize v2.2.1
+       Fresh once_cell v1.21.4
+       Fresh solana-atomic-u64 v2.2.1
+       Fresh syn v3.0.6
+       Fresh generic-array v0.14.7
+       Fresh syn v2.0.119
+       Fresh syn v1.0.109
+       Fresh zerocopy v0.8.57
+       Fresh toml_edit v0.25.15+spec-1.1.0
+       Fresh zeroize v1.9.0
+       Fresh subtle v2.6.1
+       Fresh rand_core v0.6.4
+       Fresh five8_const v0.1.4
+       Fresh memchr v2.8.3
+       Fresh itoa v1.0.18
+       Fresh serde_derive v1.0.229
+       Fresh crypto-common v0.1.7
+       Fresh block-buffer v0.10.4
+       Fresh bytemuck_derive v1.12.1
+       Fresh borsh-derive-internal v0.10.4
+       Fresh ahash v0.8.12
+       Fresh borsh-schema-derive-internal v0.10.4
+       Fresh num-traits v0.2.19
+       Fresh proc-macro-crate v3.5.0
+       Fresh curve25519-dalek-derive v0.1.1
+       Fresh zmij v1.0.23
+       Fresh bs58 v0.5.1
+       Fresh serde v1.0.229
+       Fresh digest v0.10.7
+       Fresh bytemuck v1.25.2
+       Fresh hashbrown v0.13.2
+       Fresh borsh-derive v1.8.1
+       Fresh solana-decode-error v2.3.0
+       Fresh serde_json v1.0.151
+       Fresh unicode-segmentation v1.13.3
+       Fresh thiserror-impl v1.0.69
+       Fresh solana-msg v2.2.1
+       Fresh solana-sdk-macro v2.2.1
+       Fresh solana-program-memory v2.3.1
+       Fresh bitflags v2.13.2
+       Fresh feature-probe v0.1.1
+       Fresh sha2 v0.10.9
+       Fresh toml v0.5.11
+       Fresh solana-hash v2.3.0
+       Fresh borsh v1.8.1
+       Fresh curve25519-dalek v4.1.3
+       Fresh bincode v1.3.3
+       Fresh anyhow v1.0.104
+       Fresh heck v0.3.3
+       Fresh thiserror v1.0.69
+       Fresh log v0.4.34
+       Fresh linux-raw-sys v0.12.1
+       Fresh serde_bytes v0.11.19
+       Fresh proc-macro-crate v0.1.5
+       Fresh solana-sha256-hasher v2.3.0
+       Fresh anchor-syn v0.32.2
+       Fresh libc v0.2.189
+       Fresh anchor-lang-idl-spec v0.1.0
+       Fresh solana-fee-calculator v2.2.1
+       Fresh lazy_static v1.5.0
+       Fresh base64 v0.22.1
+       Fresh solana-define-syscall v2.3.0
+       Fresh fastrand v2.5.0
+       Fresh anchor-derive-space v0.32.2
+       Fresh ppv-lite86 v0.2.21
+       Fresh bit-vec v0.8.0
+       Fresh borsh-derive v0.10.4
+       Fresh getrandom v0.3.4
+       Fresh bv v0.11.1
+       Fresh anchor-lang-idl v0.1.4
+       Fresh getrandom v0.4.3
+       Fresh rustix v1.1.5
+       Fresh anchor-derive-accounts v0.32.2
+       Fresh anchor-attribute-access-control v0.32.2
+       Fresh anchor-attribute-event v0.32.2
+       Fresh anchor-derive-serde v0.32.2
+       Fresh anchor-attribute-error v0.32.2
+       Fresh anchor-attribute-account v0.32.2
+       Fresh wait-timeout v0.2.1
+       Fresh anchor-attribute-constant v0.32.2
+       Fresh solana-program-option v2.2.1
+       Fresh quick-error v1.2.3
+       Fresh base64 v0.21.7
+       Fresh borsh v0.10.4
+       Fresh rand_core v0.9.5
+       Fresh tempfile v3.27.0
+       Fresh anchor-attribute-program v0.32.2
+       Fresh fnv v1.0.7
+       Fresh bit-set v0.8.0
+       Fresh unarray v0.1.4
+       Fresh regex-syntax v0.8.11
+       Fresh solana-pubkey v2.4.0
+       Fresh rusty-fork v0.3.1
+       Fresh rand_chacha v0.9.0
+       Fresh rand v0.9.5
+       Fresh rand_xorshift v0.4.0
+       Fresh solana-sdk-ids v2.2.1
+       Fresh solana-instruction v2.3.3
+       Fresh proptest v1.11.0
+       Fresh solana-sysvar-id v2.2.1
+       Fresh solana-program-error v2.2.2
+       Fresh solana-system-interface v1.0.0
+       Fresh solana-serialize-utils v2.2.1
+       Fresh solana-stable-layout v2.2.1
+       Fresh solana-feature-gate-interface v2.2.2
+       Fresh solana-account-info v2.3.0
+       Fresh solana-clock v2.2.3
+       Fresh solana-rent v2.2.1
+       Fresh solana-slot-history v2.2.1
+       Fresh solana-epoch-schedule v2.2.1
+       Fresh solana-last-restart-slot v2.2.1
+       Fresh solana-slot-hashes v2.2.1
+       Fresh solana-epoch-rewards v2.2.1
+       Fresh solana-loader-v3-interface v3.0.0
+       Fresh solana-program-pack v2.2.1
+       Fresh solana-cpi v2.2.1
+       Fresh solana-program-entrypoint v2.3.0
+       Fresh solana-instructions-sysvar v2.2.2
+       Fresh solana-stake-interface v1.2.1
+       Fresh solana-invoke v0.4.0
+       Fresh solana-sysvar v2.3.0
+       Fresh anchor-lang v0.32.2
+warning: unused variable: `supply`
+  --> programs/stockpump/src/math.rs:47:5
+   |
+47 |     supply: u64,
+   |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_supply`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `held`
+  --> programs/stockpump/src/math.rs:48:5
+   |
+48 |     held: &[u64],
+   |     ^^^^ help: if this is intentional, prefix it with an underscore: `_held`
+
+warning: unused variable: `net_in`
+  --> programs/stockpump/src/math.rs:49:5
+   |
+49 |     net_in: &[u64],
+   |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_net_in`
+
+warning: `stockpump` (lib) generated 3 warnings
+warning: `stockpump` (lib test) generated 3 warnings (3 duplicates)
+       Fresh stockpump v0.1.0 (/tmp/cargo-mutants-stockpump-ZbncvV.tmp/programs/stockpump)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running `/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/stockpump-a9825ce1461bf23e`
+
+running 9 tests
+test math::tests::control_the_gain_comes_from_the_fee_and_nothing_else ... ok
+test math::tests::fee_at_or_above_100_percent_is_refused ... ok
+test math::tests::zero_fee_is_refused_everywhere ... ok
+test test_id ... ok
+test math::tests::fee_split_is_exact_and_rounds_to_the_vault ... ok
+test math::tests::redeem_never_pays_more_than_pro_rata ... ok
+test math::tests::deposit_never_lowers_held_per_share ... ok
+test math::tests::redeem_never_lowers_held_per_share ... ok
+test math::tests::deposit_then_redeem_is_never_profitable ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests stockpump
+     Running `/home/jayant/.rustup/toolchains/1.89.0-x86_64-unknown-linux-gnu/bin/rustdoc --edition=2021 --crate-type cdylib --crate-type lib --color auto --crate-name stockpump --test programs/stockpump/src/lib.rs --test-run-directory /tmp/cargo-mutants-stockpump-ZbncvV.tmp/programs/stockpump -L dependency=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps -L dependency=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps --warn=unexpected_cfgs --check-cfg 'cfg(target_os, values("solana"))' --extern anchor_lang=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/libanchor_lang-1b951aa7a3ef3423.rlib --extern proptest=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/libproptest-0fdcac4bd4541ef2.rlib --extern stockpump=/tmp/cargo-mutants-stockpump-ZbncvV.tmp/target/debug/deps/libstockpump.rlib -C embed-bitcode=no --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("anchor-debug", "cpi", "custom-heap", "custom-panic", "default", "idl-build", "no-entrypoint", "no-idl", "no-log-ix-name"))' --error-format human`
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+*** result: Success

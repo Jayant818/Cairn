@@ -1,0 +1,21 @@
+--- programs/stockpump/src/math.rs
++++ replace * with + in apply_fee
+@@ -27,17 +27,17 @@
+     if fee_bps == 0 {
+         return Err(StockPumpError::ZeroFee);
+     }
+     if fee_bps as u128 >= BPS_DENOM {
+         return Err(StockPumpError::FeeTooLarge);
+     }
+     let a = amount as u128;
+     // div_ceil: the vault keeps the rounding, never the user.
+-    let fee = (a * fee_bps as u128).div_ceil(BPS_DENOM);
++    let fee = (a + /* ~ changed by cargo-mutants ~ */ fee_bps as u128).div_ceil(BPS_DENOM);
+     let net = a.checked_sub(fee).ok_or(StockPumpError::MathOverflow)?;
+     Ok((
+         u64::try_from(net).map_err(|_| StockPumpError::MathOverflow)?,
+         u64::try_from(fee).map_err(|_| StockPumpError::MathOverflow)?,
+     ))
+ }
+ 
+ /// Shares for a proportional in-kind deposit: `min_i(supply * net_in_i / held_i)`.

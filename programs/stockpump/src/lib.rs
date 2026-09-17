@@ -47,11 +47,11 @@ pub mod stockpump {
         require!(!ctx.accounts.vault.bootstrapped, StockPumpError::AlreadyBootstrapped);
 
         let r0 = transfer_in_measured(
-            &ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
+            &ctx.accounts.token_program_0, &ctx.accounts.sleeve0_mint,
             &ctx.accounts.user_ata0, &mut ctx.accounts.vault_ata0,
             &ctx.accounts.depositor, amounts[0])?;
         let r1 = transfer_in_measured(
-            &ctx.accounts.token_program, &ctx.accounts.sleeve1_mint,
+            &ctx.accounts.token_program_1, &ctx.accounts.sleeve1_mint,
             &ctx.accounts.user_ata1, &mut ctx.accounts.vault_ata1,
             &ctx.accounts.depositor, amounts[1])?;
         require!(r0 > 0 && r1 > 0, StockPumpError::EmptySleeve);
@@ -66,7 +66,7 @@ pub mod stockpump {
         let seeds: &[&[u8]] = &[Vault::SEED, sleeve0.as_ref(), &[bump]];
         mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.share_token_program.to_account_info(),
                 MintTo {
                     mint: ctx.accounts.share_mint.to_account_info(),
                     to: ctx.accounts.dead_share_ata.to_account_info(),
@@ -87,11 +87,11 @@ pub mod stockpump {
 
         // Move the tokens in FIRST, measuring what actually arrived.
         let r0 = transfer_in_measured(
-            &ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
+            &ctx.accounts.token_program_0, &ctx.accounts.sleeve0_mint,
             &ctx.accounts.user_ata0, &mut ctx.accounts.vault_ata0,
             &ctx.accounts.depositor, amounts[0])?;
         let r1 = transfer_in_measured(
-            &ctx.accounts.token_program, &ctx.accounts.sleeve1_mint,
+            &ctx.accounts.token_program_1, &ctx.accounts.sleeve1_mint,
             &ctx.accounts.user_ata1, &mut ctx.accounts.vault_ata1,
             &ctx.accounts.depositor, amounts[1])?;
         // Inline, not borrowed from a guard in another function. Bootstrap and this path
@@ -114,7 +114,7 @@ pub mod stockpump {
         let seeds: &[&[u8]] = &[Vault::SEED, sleeve0.as_ref(), &[bump]];
         mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.share_token_program.to_account_info(),
                 MintTo {
                     mint: ctx.accounts.share_mint.to_account_info(),
                     to: ctx.accounts.depositor_share_ata.to_account_info(),
@@ -142,7 +142,7 @@ pub mod stockpump {
 
         burn(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.share_token_program.to_account_info(),
                 Burn {
                     mint: ctx.accounts.share_mint.to_account_info(),
                     from: ctx.accounts.redeemer_share_ata.to_account_info(),
@@ -156,14 +156,14 @@ pub mod stockpump {
         let sleeve0 = ctx.accounts.sleeve0_mint.key();
         let seeds: &[&[u8]] = &[Vault::SEED, sleeve0.as_ref(), &[bump]];
         if sleeve_mask & 0b01 != 0 {
-            transfer_out(&ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
+            transfer_out(&ctx.accounts.token_program_0, &ctx.accounts.sleeve0_mint,
                 &ctx.accounts.vault_ata0, &ctx.accounts.user_ata0,
                 &ctx.accounts.vault, seeds, out[0])?;
             let v = &mut ctx.accounts.vault;
             v.sleeves[0].held = v.sleeves[0].held.checked_sub(out[0]).ok_or(StockPumpError::MathOverflow)?;
         }
         if sleeve_mask & 0b10 != 0 {
-            transfer_out(&ctx.accounts.token_program, &ctx.accounts.sleeve1_mint,
+            transfer_out(&ctx.accounts.token_program_1, &ctx.accounts.sleeve1_mint,
                 &ctx.accounts.vault_ata1, &ctx.accounts.user_ata1,
                 &ctx.accounts.vault, seeds, out[1])?;
             let v = &mut ctx.accounts.vault;
@@ -325,7 +325,14 @@ pub struct Bootstrap<'info> {
     /// Dead shares land here, owned by the vault PDA, redeemable by nobody.
     #[account(mut, token::mint = share_mint, token::authority = vault)]
     pub dead_share_ata: Box<InterfaceAccount<'info, TokenAccount>>,
-    pub token_program: Interface<'info, TokenInterface>,
+    /// Sleeve 0's token program. Constrained to the mint's OWNER, so a caller cannot
+    /// route a Token-2022 mint's CPI through classic SPL or vice versa.
+    #[account(constraint = token_program_0.key() == *sleeve0_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub token_program_0: Interface<'info, TokenInterface>,
+    #[account(constraint = share_token_program.key() == *share_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub share_token_program: Interface<'info, TokenInterface>,
+    #[account(constraint = token_program_1.key() == *sleeve1_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub token_program_1: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -349,7 +356,14 @@ pub struct Deposit<'info> {
     pub user_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = share_mint, token::authority = depositor)]
     pub depositor_share_ata: Box<InterfaceAccount<'info, TokenAccount>>,
-    pub token_program: Interface<'info, TokenInterface>,
+    /// Sleeve 0's token program. Constrained to the mint's OWNER, so a caller cannot
+    /// route a Token-2022 mint's CPI through classic SPL or vice versa.
+    #[account(constraint = token_program_0.key() == *sleeve0_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub token_program_0: Interface<'info, TokenInterface>,
+    #[account(constraint = share_token_program.key() == *share_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub share_token_program: Interface<'info, TokenInterface>,
+    #[account(constraint = token_program_1.key() == *sleeve1_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub token_program_1: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -373,7 +387,14 @@ pub struct Redeem<'info> {
     pub user_ata1: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = share_mint, token::authority = redeemer)]
     pub redeemer_share_ata: Box<InterfaceAccount<'info, TokenAccount>>,
-    pub token_program: Interface<'info, TokenInterface>,
+    /// Sleeve 0's token program. Constrained to the mint's OWNER, so a caller cannot
+    /// route a Token-2022 mint's CPI through classic SPL or vice versa.
+    #[account(constraint = token_program_0.key() == *sleeve0_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub token_program_0: Interface<'info, TokenInterface>,
+    #[account(constraint = share_token_program.key() == *share_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub share_token_program: Interface<'info, TokenInterface>,
+    #[account(constraint = token_program_1.key() == *sleeve1_mint.to_account_info().owner @ StockPumpError::SleeveMismatch)]
+    pub token_program_1: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]

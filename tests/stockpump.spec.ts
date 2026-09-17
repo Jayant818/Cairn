@@ -176,7 +176,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       depositor: stranger.publicKey, vault, authority: authority.publicKey,
       shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: sAta0, userAta1: sAta1,
-      deadShareAta, tokenProgram: T22,
+      deadShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
     }).instruction();
     const tx = new anchor.web3.Transaction().add(ix);
     tx.feePayer = stranger.publicKey;
@@ -198,7 +198,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       depositor: authority.publicKey, vault, authority: authority.publicKey,
       shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      deadShareAta, tokenProgram: T22,
+      deadShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
     const r = await ratios();
@@ -218,7 +218,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
         depositor: authority.publicKey, vault, authority: authority.publicKey,
         shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
         vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-        deadShareAta, tokenProgram: T22,
+        deadShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
       }).rpc({ commitment: "confirmed" });
       assert.fail("second bootstrap succeeded");
     } catch (e: any) { assert.match(String(e), /AlreadyBootstrapped/); }
@@ -234,7 +234,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       depositor: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      depositorShareAta: userShareAta, tokenProgram: T22,
+      depositorShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
     const after = await ratios();
@@ -271,7 +271,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      redeemerShareAta: userShareAta, tokenProgram: T22,
+      redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
     const a0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
@@ -292,7 +292,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
           redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
           sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
           vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-          redeemerShareAta: userShareAta, tokenProgram: T22,
+          redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: T22, shareTokenProgram: T22,
         }).rpc({ commitment: "confirmed" });
         assert.fail(`mask ${mask} accepted`);
       } catch (e: any) { assert.match(String(e), /EmptyMask/); }

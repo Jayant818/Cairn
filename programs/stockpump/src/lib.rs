@@ -25,6 +25,8 @@ pub mod stockpump {
         // it guards a PARAMETER rather than a state transition — it cannot walk into a wall.
         require!(fee_bps > 0, StockPumpError::ZeroFee);
         require!((fee_bps as u128) < math::BPS_DENOM, StockPumpError::FeeTooLarge);
+        reject_closable_mint(&ctx.accounts.sleeve0_mint)?;
+        reject_closable_mint(&ctx.accounts.sleeve1_mint)?;
 
         let v = &mut ctx.accounts.vault;
         v.authority = ctx.accounts.authority.key();
@@ -188,6 +190,31 @@ pub mod stockpump {
     }
 }
 
+/// A mint carrying MintCloseAuthority can be closed and RECREATED AT THE SAME ADDRESS with
+/// different extensions or decimals. The vault stores a sleeve as an address, so a reinit
+/// silently rewrites the rules while every account constraint still passes — token accounts
+/// opened under the old mint keep working under the new one.
+/// ⚠️ This is necessary and NOT sufficient: it proves the mint cannot be closed FROM NOW ON.
+/// It cannot prove the mint was never already closed and reinitialised before we saw it.
+/// That question needs history, which a program cannot read.
+fn reject_closable_mint(mint: &InterfaceAccount<Mint>) -> Result<()> {
+    use anchor_spl::token_interface::spl_token_2022::extension::{
+        BaseStateWithExtensions, StateWithExtensions, mint_close_authority::MintCloseAuthority,
+    };
+    let info = mint.to_account_info();
+    let data = info.try_borrow_data()?;
+    // A classic 82-byte SPL mint has no extension area at all, so it cannot be closed.
+    if data.len() <= 82 {
+        return Ok(());
+    }
+    let state = StateWithExtensions::<anchor_spl::token_interface::spl_token_2022::state::Mint>::unpack(&data)
+        .map_err(|_| error!(StockPumpError::SleeveMismatch))?;
+    if state.get_extension::<MintCloseAuthority>().is_ok() {
+        return Err(error!(StockPumpError::MintIsClosable));
+    }
+    Ok(())
+}
+
 /// Reads the vault ATA before and after its OWN transfer and returns the delta.
 /// ⛔ `reload()` is load-bearing: `ctx.accounts.*` is a snapshot deserialized at instruction
 /// entry, and a CPI mutates the ACCOUNT, not the struct. Without it before == after, the
@@ -276,8 +303,12 @@ pub struct Bootstrap<'info> {
     #[account(mut, seeds = [Vault::SEED, sleeve0_mint.key().as_ref()], bump = vault.bump,
               has_one = share_mint, has_one = authority)]
     pub vault: Account<'info, Vault>,
-    /// CHECK: bound by has_one = authority on the vault
-    pub authority: UncheckedAccount<'info>,
+    /// MUST SIGN. Bootstrap fixes the initial held for both sleeves, and that ratio is the
+    /// reference every later deposit is priced against. It is one-shot, so an ungated bootstrap
+    /// lets a front-runner seed held = [1, 1] and poison the pricing basis permanently.
+    /// This was an UncheckedAccount bound only by has_one, which made the vault's own authority
+    /// a value anyone could quote rather than a party that had to consent.
+    pub authority: Signer<'info>,
     #[account(mut)] pub share_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
     pub sleeve0_mint: Box<InterfaceAccount<'info, Mint>>,

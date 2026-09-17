@@ -15,6 +15,7 @@ import {
   createInitializeTransferHookInstruction,
   createInitializeScaledUiAmountConfigInstruction,
   createInitializePausableConfigInstruction,
+  createInitializeMintCloseAuthorityInstruction,
 } from "@solana/spl-token";
 
 export interface TestMintOpts {
@@ -27,6 +28,9 @@ export interface TestMintOpts {
   transferFeeBasisPoints: number;
   maximumFee?: bigint;
   scaledUiMultiplier?: number;
+  /** MintCloseAuthority. Only used to prove initialize REJECTS such a mint: a closable mint can
+   *  be recreated at the same address with different extensions or decimals. */
+  closeAuthority?: PublicKey | null;
   mintAuthority?: PublicKey;
   freezeAuthority?: PublicKey | null;
 }
@@ -44,6 +48,7 @@ export async function createTestMint(
   if (opts.permanentDelegate) types.push(ExtensionType.PermanentDelegate);
   if (opts.transferHookProgram) types.push(ExtensionType.TransferHook);
   if (opts.pausableAuthority) types.push(ExtensionType.PausableConfig);
+  if (opts.closeAuthority) types.push(ExtensionType.MintCloseAuthority);
 
   const space = getMintLen(types);
   const lamports = await connection.getMinimumBalanceForRentExemption(space);
@@ -71,6 +76,9 @@ export async function createTestMint(
   }
   if (opts.pausableAuthority) {
     tx.add(createInitializePausableConfigInstruction(mint, opts.pausableAuthority, TOKEN_2022_PROGRAM_ID));
+  }
+  if (opts.closeAuthority) {
+    tx.add(createInitializeMintCloseAuthorityInstruction(mint, opts.closeAuthority, TOKEN_2022_PROGRAM_ID));
   }
   tx.add(createInitializeMint2Instruction(
     mint, opts.decimals, authority,

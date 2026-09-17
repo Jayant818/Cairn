@@ -110,6 +110,87 @@ describe("stockpump vault", () => {
     userShareAta = await createAssociatedTokenAccountIdempotent(connection, authority, shareMint.publicKey, authority.publicKey, {}, T22);
   });
 
+it("initialize REJECTS a sleeve mint that can be closed and reinitialised", async function () {
+    this.timeout(60_000);
+    // A MintCloseAuthority mint can be closed and recreated AT THE SAME ADDRESS with different
+    // extensions or decimals. The vault stores a sleeve as an ADDRESS, so a reinit rewrites the
+    // rules underneath it while every account constraint still passes.
+    const closable = await createTestMint(connection, authority, {
+      decimals: 8, permanentDelegate: null, pausableAuthority: null,
+      transferHookProgram: null, transferFeeBasisPoints: 0,
+      closeAuthority: authority.publicKey,
+    });
+    const sm = Keypair.generate();
+    const [v2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), closable.toBuffer()], program.programId);
+    try {
+      await program.methods.initialize(FEE_BPS).accounts({
+        authority: authority.publicKey, vault: v2, shareMint: sm.publicKey,
+        sleeve0Mint: closable, sleeve1Mint: sleeve1,
+        tokenProgram: T22, systemProgram: SystemProgram.programId,
+      }).signers([sm]).rpc({ commitment: "confirmed" });
+      assert.fail("initialize accepted a closable sleeve mint");
+    } catch (e: any) {
+      assert.match(String(e), /MintIsClosable/, `expected MintIsClosable, got: ${e}`);
+    }
+    // CONTROL: the same call with a NON-closable mint must succeed, or the test above would
+    // pass for any reason at all.
+    const ok = await createTestMint(connection, authority, {
+      decimals: 8, permanentDelegate: null, pausableAuthority: null,
+      transferHookProgram: null, transferFeeBasisPoints: 0,
+    });
+    const sm2 = Keypair.generate();
+    const [v3] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), ok.toBuffer()], program.programId);
+    await program.methods.initialize(FEE_BPS).accounts({
+      authority: authority.publicKey, vault: v3, shareMint: sm2.publicKey,
+      sleeve0Mint: ok, sleeve1Mint: sleeve1,
+      tokenProgram: T22, systemProgram: SystemProgram.programId,
+    }).signers([sm2]).rpc({ commitment: "confirmed" });
+  });
+
+  it("bootstrap REQUIRES the authority to sign — not merely to be named", async function () {
+    this.timeout(60_000);
+    // Before this was a Signer, `authority` was an UncheckedAccount bound only by has_one, so
+    // anyone could bootstrap by quoting the (public) authority pubkey. Bootstrap is one-shot and
+    // fixes the ratio every later deposit is priced against: a front-runner seeding held = [1,1]
+    // poisons the pricing basis permanently.
+    const stranger = Keypair.generate();
+    const sig = await connection.requestAirdrop(stranger.publicKey, 2_000_000_000);
+    await connection.confirmTransaction({ signature: sig, ...(await connection.getLatestBlockhash()) }, "confirmed");
+    // ⛔ THE STRANGER MUST OWN AND FUND THEIR OWN ATAs. The first version of this test reused
+    // the authority's token accounts, so it failed on ConstraintTokenOwner (2015) — the ATA
+    // ownership check fired BEFORE the signature check, and the test would have "passed" while
+    // proving nothing about the authority gate. A test that stops at the first constraint does
+    // not test the constraint it names.
+    const sAta0 = await createAssociatedTokenAccountIdempotent(connection, stranger, sleeve0, stranger.publicKey, {}, T22);
+    const sAta1 = await createAssociatedTokenAccountIdempotent(connection, stranger, sleeve1, stranger.publicKey, {}, T22);
+    await mintTo(connection, authority, sleeve0, sAta0, authority, 10_000_000n, [], {}, T22);
+    await mintTo(connection, authority, sleeve1, sAta1, authority, 10_000_000n, [], {}, T22);
+    // ⛔⛔ AND THE STRANGER MUST BE THE FEE PAYER. Anchor's .rpc() pays fees from the provider
+    // wallet — which IS the authority here — so the authority signs every transaction anyway and
+    // the gate can never be observed to fire. The first isolated version of this test PASSED the
+    // stranger's bootstrap for exactly that reason. In production the caller pays their own fees
+    // and the authority is not a signer at all; the test has to reproduce that or it tests nothing.
+    const ix = await program.methods.bootstrap([new BN(1_000), new BN(1_000)]).accounts({
+      depositor: stranger.publicKey, vault, authority: authority.publicKey,
+      shareMint: shareMint.publicKey, sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
+      vaultAta0: vAta0, vaultAta1: vAta1, userAta0: sAta0, userAta1: sAta1,
+      deadShareAta, tokenProgram: T22,
+    }).instruction();
+    const tx = new anchor.web3.Transaction().add(ix);
+    tx.feePayer = stranger.publicKey;
+    tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+    try {
+      await anchor.web3.sendAndConfirmTransaction(connection, tx, [stranger], { commitment: "confirmed" });
+      assert.fail("a stranger bootstrapped the vault by quoting the authority pubkey");
+    } catch (e: any) {
+      const msg = String(e);
+      assert.match(msg, /Signature verification failed|missing required signature|unknown signer|Missing signature/i,
+        `expected a MISSING-SIGNATURE failure — anything else means a different constraint fired first and the authority gate is untested. Got: ${msg}`);
+    }
+  });
+
   it("bootstrap burns dead shares and records MEASURED held, not the amount asked for", async function () {
     this.timeout(60_000);
     const A0 = 70_000_000n, A1 = 30_000_000n;

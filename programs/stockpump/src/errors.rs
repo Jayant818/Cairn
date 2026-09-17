@@ -25,6 +25,8 @@ pub enum StockPumpError {
     NotBootstrapped,
     #[msg("sleeve_mask must select at least one sleeve and no undefined bit")]
     EmptyMask,
+    #[msg("sleeve mint carries MintCloseAuthority — it could be closed and reinitialised at the same address with different rules")]
+    MintIsClosable,
     #[msg("reconcile is downward-only — an upward mark reopens the donation vector")]
     ReconcileNotDownward,
 }

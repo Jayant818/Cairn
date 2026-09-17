@@ -62,7 +62,17 @@ fn ts_integration_suite() {
     // --tools-version vX` forwards the flag to the IDL's cargo test, which rejects it, while
     // leaving a stale .so on disk whose hash can still look correct. build.sh does the two
     // steps explicitly on v1.55 and prints the ELF flags so a codegen change cannot pass quietly.
-    assert!(sh("./build.sh"), "build.sh failed");
+    // ⛔ INLINE, not ./build.sh. cargo-mutants runs in a scratch copy and the script was not
+    // reliably there — the baseline died with "No such file or directory" and cargo-mutants
+    // reported it as "cargo test failed in an unmutated tree", which reads as a broken suite.
+    // Depending on a sibling FILE inside a harness that runs in a COPIED TREE is the bug; the
+    // two commands are short enough to carry directly.
+    assert!(sh("cargo-build-sbf --tools-version v1.55 --manifest-path programs/stockpump/Cargo.toml"),
+            "sbf build failed");
+    // `-o` does not create the directory, and target/ is not copied into the scratch tree, so
+    // this failed with a bare "No such file or directory" that named neither the path nor the
+    // step. Fourth baseline failure on this bridge; all four were a missing file in the copy.
+    assert!(sh("mkdir -p target/idl && anchor idl build -o target/idl/stockpump.json"), "idl build failed");
     assert!(sh("anchor deploy --provider.cluster http://127.0.0.1:8899"), "deploy failed");
     let home = std::env::var("HOME").unwrap();
     assert!(

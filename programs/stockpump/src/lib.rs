@@ -1,9 +1,351 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{
+    burn, mint_to, transfer_checked, Burn, Mint, MintTo, TokenAccount, TokenInterface,
+    TransferChecked,
+};
 
 pub mod errors;
 pub mod math;
+pub mod state;
 
-declare_id!("11111111111111111111111111111111");
+use errors::StockPumpError;
+use math::{apply_fee, payout_for_redeem, shares_for_deposit};
+use state::{Sleeve, Vault, DEAD_SHARES, N_SLEEVES};
+
+declare_id!("HSWCCzwdPgMX8RyqpZiUnCR3etipvTcv1dw31dfV3KaT");
 
 #[program]
-pub mod stockpump {}
+pub mod stockpump {
+    use super::*;
+
+    pub fn initialize(ctx: Context<Initialize>, fee_bps: u16) -> Result<()> {
+        // The product claim IS the fee. At fee_bps = 0 both ratio gains are exactly 1.0, so
+        // held-per-share stops rising while every line of code still runs and every test that
+        // checks "does not fall" still passes. This is the only require! the design needs, and
+        // it guards a PARAMETER rather than a state transition — it cannot walk into a wall.
+        require!(fee_bps > 0, StockPumpError::ZeroFee);
+        require!((fee_bps as u128) < math::BPS_DENOM, StockPumpError::FeeTooLarge);
+
+        let v = &mut ctx.accounts.vault;
+        v.authority = ctx.accounts.authority.key();
+        v.share_mint = ctx.accounts.share_mint.key();
+        v.fee_bps = fee_bps;
+        v.sleeves = [
+            Sleeve { mint: ctx.accounts.sleeve0_mint.key(), held: 0 },
+            Sleeve { mint: ctx.accounts.sleeve1_mint.key(), held: 0 },
+        ];
+        v.bootstrapped = false;
+        v.bump = ctx.bumps.vault;
+        Ok(())
+    }
+
+    /// Dead first deposit. Mints DEAD_SHARES to a vault-owned account nobody can redeem,
+    /// so supply is never zero when a real depositor arrives.
+    pub fn bootstrap(ctx: Context<Bootstrap>, amounts: [u64; N_SLEEVES]) -> Result<()> {
+        require!(!ctx.accounts.vault.bootstrapped, StockPumpError::AlreadyBootstrapped);
+
+        let r0 = transfer_in_measured(
+            &ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
+            &ctx.accounts.user_ata0, &mut ctx.accounts.vault_ata0,
+            &ctx.accounts.depositor, amounts[0])?;
+        let r1 = transfer_in_measured(
+            &ctx.accounts.token_program, &ctx.accounts.sleeve1_mint,
+            &ctx.accounts.user_ata1, &mut ctx.accounts.vault_ata1,
+            &ctx.accounts.depositor, amounts[1])?;
+        require!(r0 > 0 && r1 > 0, StockPumpError::EmptySleeve);
+
+        let v = &mut ctx.accounts.vault;
+        v.sleeves[0].held = r0;
+        v.sleeves[1].held = r1;
+        v.bootstrapped = true;
+
+        let bump = v.bump;
+        let seeds: &[&[u8]] = &[Vault::SEED, &[bump]];
+        mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.share_mint.to_account_info(),
+                    to: ctx.accounts.dead_share_ata.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                &[seeds],
+            ),
+            DEAD_SHARES,
+        )?;
+        Ok(())
+    }
+
+    pub fn deposit(ctx: Context<Deposit>, amounts: [u64; N_SLEEVES]) -> Result<()> {
+        require!(ctx.accounts.vault.bootstrapped, StockPumpError::NotBootstrapped);
+        let fee_bps = ctx.accounts.vault.fee_bps;
+        let held = ctx.accounts.vault.held();
+        let supply = ctx.accounts.share_mint.supply;
+
+        // Move the tokens in FIRST, measuring what actually arrived.
+        let r0 = transfer_in_measured(
+            &ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
+            &ctx.accounts.user_ata0, &mut ctx.accounts.vault_ata0,
+            &ctx.accounts.depositor, amounts[0])?;
+        let r1 = transfer_in_measured(
+            &ctx.accounts.token_program, &ctx.accounts.sleeve1_mint,
+            &ctx.accounts.user_ata1, &mut ctx.accounts.vault_ata1,
+            &ctx.accounts.depositor, amounts[1])?;
+        // Inline, not borrowed from a guard in another function. Bootstrap and this path
+        // both need it, and relying on shares_for_deposit's m==0 check to catch a zero here
+        // is a dependency on a file that could change for unrelated reasons.
+        require!(r0 > 0, StockPumpError::EmptySleeve);
+        require!(r1 > 0, StockPumpError::EmptySleeve);
+
+        // The WHOLE deposit enters the vault; only the fee portion is never minted against.
+        let (n0, _f0) = apply_fee(r0, fee_bps)?;
+        let (n1, _f1) = apply_fee(r1, fee_bps)?;
+        let shares = shares_for_deposit(supply, &held, &[n0, n1])?;
+
+        let v = &mut ctx.accounts.vault;
+        v.sleeves[0].held = v.sleeves[0].held.checked_add(r0).ok_or(StockPumpError::MathOverflow)?;
+        v.sleeves[1].held = v.sleeves[1].held.checked_add(r1).ok_or(StockPumpError::MathOverflow)?;
+
+        let bump = v.bump;
+        let seeds: &[&[u8]] = &[Vault::SEED, &[bump]];
+        mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.share_mint.to_account_info(),
+                    to: ctx.accounts.depositor_share_ata.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                &[seeds],
+            ),
+            shares,
+        )?;
+        emit!(Deposited { shares, received: [r0, r1] });
+        Ok(())
+    }
+
+    /// `sleeve_mask` bit i = take sleeve i. A frozen or seized sleeve would otherwise revert
+    /// the whole instruction and strand the UNFROZEN leg the user is entitled to — the
+    /// "USDY survives if Backed pulls the plug" claim is false without this.
+    /// ⚠️ Shares burn in full regardless: taking one leg is the user's choice, not a discount.
+    pub fn redeem(ctx: Context<Redeem>, shares: u64, sleeve_mask: u8) -> Result<()> {
+        require!(sleeve_mask & 0b11 != 0, StockPumpError::EmptyMask);
+        require!(sleeve_mask & !0b11 == 0, StockPumpError::EmptyMask);
+        let v_fee = ctx.accounts.vault.fee_bps;
+        let held = ctx.accounts.vault.held();
+        let supply = ctx.accounts.share_mint.supply;
+        let out = payout_for_redeem(supply, &held, shares, v_fee)?;
+
+        burn(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Burn {
+                    mint: ctx.accounts.share_mint.to_account_info(),
+                    from: ctx.accounts.redeemer_share_ata.to_account_info(),
+                    authority: ctx.accounts.redeemer.to_account_info(),
+                },
+            ),
+            shares,
+        )?;
+
+        let bump = ctx.accounts.vault.bump;
+        let seeds: &[&[u8]] = &[Vault::SEED, &[bump]];
+        if sleeve_mask & 0b01 != 0 {
+            transfer_out(&ctx.accounts.token_program, &ctx.accounts.sleeve0_mint,
+                &ctx.accounts.vault_ata0, &ctx.accounts.user_ata0,
+                &ctx.accounts.vault, seeds, out[0])?;
+            let v = &mut ctx.accounts.vault;
+            v.sleeves[0].held = v.sleeves[0].held.checked_sub(out[0]).ok_or(StockPumpError::MathOverflow)?;
+        }
+        if sleeve_mask & 0b10 != 0 {
+            transfer_out(&ctx.accounts.token_program, &ctx.accounts.sleeve1_mint,
+                &ctx.accounts.vault_ata1, &ctx.accounts.user_ata1,
+                &ctx.accounts.vault, seeds, out[1])?;
+            let v = &mut ctx.accounts.vault;
+            v.sleeves[1].held = v.sleeves[1].held.checked_sub(out[1]).ok_or(StockPumpError::MathOverflow)?;
+        }
+        emit!(Redeemed { shares, paid: out.clone(), mask: sleeve_mask });
+        Ok(())
+    }
+
+    /// DOWNWARD ONLY. If Backed's permanent delegate seizes from the vault ATA, internal
+    /// `held` is stale-high and every redeem reverts. This lets the authority mark the loss
+    /// down to reality. It can NEVER mark up — an upward reconcile would reopen the donation
+    /// vector that internal accounting exists to close.
+    pub fn reconcile(ctx: Context<Reconcile>, idx: u8) -> Result<()> {
+        let i = idx as usize;
+        require!(i < N_SLEEVES, StockPumpError::SleeveMismatch);
+        let actual = ctx.accounts.vault_ata.amount;
+        let v = &mut ctx.accounts.vault;
+        require!(ctx.accounts.vault_ata.mint == v.sleeves[i].mint, StockPumpError::SleeveMismatch);
+        require!(actual < v.sleeves[i].held, StockPumpError::ReconcileNotDownward);
+        v.sleeves[i].held = actual;
+        emit!(Reconciled { idx, new_held: actual });
+        Ok(())
+    }
+}
+
+/// Reads the vault ATA before and after its OWN transfer and returns the delta.
+/// ⛔ `reload()` is load-bearing: `ctx.accounts.*` is a snapshot deserialized at instruction
+/// entry, and a CPI mutates the ACCOUNT, not the struct. Without it before == after, the
+/// delta is 0, and every deposit reverts with DepositTooSmall.
+fn transfer_in_measured<'info>(
+    token_program: &Interface<'info, TokenInterface>,
+    mint: &InterfaceAccount<'info, Mint>,
+    from: &InterfaceAccount<'info, TokenAccount>,
+    to: &mut InterfaceAccount<'info, TokenAccount>,
+    authority: &Signer<'info>,
+    amount: u64,
+) -> Result<u64> {
+    let before = to.amount;
+    transfer_checked(
+        CpiContext::new(
+            token_program.to_account_info(),
+            TransferChecked {
+                from: from.to_account_info(),
+                mint: mint.to_account_info(),
+                to: to.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+        ),
+        amount,
+        mint.decimals,
+    )?;
+    to.reload()?;
+    to.amount.checked_sub(before).ok_or(StockPumpError::MathOverflow.into())
+}
+
+fn transfer_out<'info>(
+    token_program: &Interface<'info, TokenInterface>,
+    mint: &InterfaceAccount<'info, Mint>,
+    from: &InterfaceAccount<'info, TokenAccount>,
+    to: &InterfaceAccount<'info, TokenAccount>,
+    vault: &Account<'info, Vault>,
+    seeds: &[&[u8]],
+    amount: u64,
+) -> Result<()> {
+    transfer_checked(
+        CpiContext::new_with_signer(
+            token_program.to_account_info(),
+            TransferChecked {
+                from: from.to_account_info(),
+                mint: mint.to_account_info(),
+                to: to.to_account_info(),
+                authority: vault.to_account_info(),
+            },
+            &[seeds],
+        ),
+        amount,
+        mint.decimals,
+    )
+}
+
+#[event]
+pub struct Deposited { pub shares: u64, pub received: [u64; N_SLEEVES] }
+#[event]
+pub struct Redeemed { pub shares: u64, pub paid: Vec<u64>, pub mask: u8 }
+#[event]
+pub struct Reconciled { pub idx: u8, pub new_held: u64 }
+
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(init, payer = authority, space = 8 + Vault::INIT_SPACE, seeds = [Vault::SEED], bump)]
+    pub vault: Account<'info, Vault>,
+    /// The program creates the share mint and holds its authority. A deployer-owned share
+    /// mint is an unlimited mint against everyone else's deposits.
+    #[account(init, payer = authority, mint::decimals = 6, mint::authority = vault,
+              mint::freeze_authority = vault, mint::token_program = token_program)]
+    pub share_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct Bootstrap<'info> {
+    #[account(mut)]
+    pub depositor: Signer<'info>,
+    #[account(mut, seeds = [Vault::SEED], bump = vault.bump,
+              has_one = share_mint, has_one = authority)]
+    pub vault: Account<'info, Vault>,
+    /// CHECK: bound by has_one = authority on the vault
+    pub authority: UncheckedAccount<'info>,
+    #[account(mut)] pub share_mint: InterfaceAccount<'info, Mint>,
+    #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
+    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    #[account(constraint = sleeve1_mint.key() == vault.sleeves[1].mint @ StockPumpError::SleeveMismatch)]
+    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, token::mint = sleeve0_mint, token::authority = vault)]
+    pub vault_ata0: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve1_mint, token::authority = vault)]
+    pub vault_ata1: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve0_mint, token::authority = depositor)]
+    pub user_ata0: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve1_mint, token::authority = depositor)]
+    pub user_ata1: InterfaceAccount<'info, TokenAccount>,
+    /// Dead shares land here, owned by the vault PDA, redeemable by nobody.
+    #[account(mut, token::mint = share_mint, token::authority = vault)]
+    pub dead_share_ata: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct Deposit<'info> {
+    #[account(mut)]
+    pub depositor: Signer<'info>,
+    #[account(mut, seeds = [Vault::SEED], bump = vault.bump, has_one = share_mint)]
+    pub vault: Account<'info, Vault>,
+    #[account(mut)] pub share_mint: InterfaceAccount<'info, Mint>,
+    #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
+    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    #[account(constraint = sleeve1_mint.key() == vault.sleeves[1].mint @ StockPumpError::SleeveMismatch)]
+    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, token::mint = sleeve0_mint, token::authority = vault)]
+    pub vault_ata0: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve1_mint, token::authority = vault)]
+    pub vault_ata1: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve0_mint, token::authority = depositor)]
+    pub user_ata0: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve1_mint, token::authority = depositor)]
+    pub user_ata1: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = share_mint, token::authority = depositor)]
+    pub depositor_share_ata: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct Redeem<'info> {
+    #[account(mut)]
+    pub redeemer: Signer<'info>,
+    #[account(mut, seeds = [Vault::SEED], bump = vault.bump, has_one = share_mint)]
+    pub vault: Account<'info, Vault>,
+    #[account(mut)] pub share_mint: InterfaceAccount<'info, Mint>,
+    #[account(constraint = sleeve0_mint.key() == vault.sleeves[0].mint @ StockPumpError::SleeveMismatch)]
+    pub sleeve0_mint: InterfaceAccount<'info, Mint>,
+    #[account(constraint = sleeve1_mint.key() == vault.sleeves[1].mint @ StockPumpError::SleeveMismatch)]
+    pub sleeve1_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, token::mint = sleeve0_mint, token::authority = vault)]
+    pub vault_ata0: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve1_mint, token::authority = vault)]
+    pub vault_ata1: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve0_mint, token::authority = redeemer)]
+    pub user_ata0: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = sleeve1_mint, token::authority = redeemer)]
+    pub user_ata1: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = share_mint, token::authority = redeemer)]
+    pub redeemer_share_ata: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct Reconcile<'info> {
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [Vault::SEED], bump = vault.bump, has_one = authority)]
+    pub vault: Account<'info, Vault>,
+    #[account(token::authority = vault)]
+    pub vault_ata: InterfaceAccount<'info, TokenAccount>,
+}

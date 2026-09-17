@@ -19,4 +19,12 @@ pub enum StockPumpError {
     ZeroFee,
     #[msg("fee_bps must be less than 10000")]
     FeeTooLarge,
+    #[msg("vault is already bootstrapped")]
+    AlreadyBootstrapped,
+    #[msg("vault is not bootstrapped")]
+    NotBootstrapped,
+    #[msg("sleeve_mask must select at least one sleeve and no undefined bit")]
+    EmptyMask,
+    #[msg("reconcile is downward-only — an upward mark reopens the donation vector")]
+    ReconcileNotDownward,
 }

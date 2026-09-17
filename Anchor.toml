@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-stockpump = "HSWCCzwdPgMX8RyqpZiUnCR3etipvTcv1dw31dfV3KaT"
+stockpump = "5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY"
 
 [registry]
 url = "https://api.apr.dev"

@@ -12,7 +12,7 @@ use errors::StockPumpError;
 use math::{apply_fee, payout_for_redeem, shares_for_deposit};
 use state::{Sleeve, Vault, DEAD_SHARES, N_SLEEVES};
 
-declare_id!("HSWCCzwdPgMX8RyqpZiUnCR3etipvTcv1dw31dfV3KaT");
+declare_id!("5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY");
 
 #[program]
 pub mod stockpump {

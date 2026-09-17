@@ -1,0 +1,72 @@
+//! Bridges `cargo test` to the TypeScript integration suite so that `cargo mutants` can
+//! exercise lib.rs at all.
+//!
+//! WHY THIS EXISTS: mutation testing drives `cargo test`. Nothing on the Rust side touches
+//! lib.rs — every instruction is exercised from TypeScript against a validator. Without this
+//! bridge all 14 lib.rs mutants would "survive", and that survival would mean "no Rust test
+//! reaches this code", not "your assertions are weak". A mutation score that measures the
+//! absence of a harness rather than the strength of a suite is worse than no score, because
+//! it reads like one.
+//!
+//! ⚠️ Requires a validator on 127.0.0.1:8899. Skips (passes) if none is reachable rather than
+//! failing — a missing validator is an ENVIRONMENT fact, and reporting it as a mutant kill
+//! would mark every mutant caught for the wrong reason.
+use std::process::Command;
+
+fn workspace_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+}
+
+fn validator_up() -> bool {
+    Command::new("curl")
+        .args(["-s", "-m", "3", "-X", "POST", "http://127.0.0.1:8899",
+               "-H", "Content-Type: application/json",
+               "-d", r#"{"jsonrpc":"2.0","id":1,"method":"getHealth"}"#])
+        .output().map(|o| String::from_utf8_lossy(&o.stdout).contains("ok")).unwrap_or(false)
+}
+
+#[test]
+fn ts_integration_suite() {
+    if !validator_up() {
+        eprintln!("no validator on 127.0.0.1:8899 — skipping (environment, not a result)");
+        return;
+    }
+    let root = workspace_root();
+    // cargo-mutants builds in a scratch copy that excludes target/, so `anchor build` there
+    // generates a FRESH program keypair while the source still says declare_id!(HSWCC…).
+    // The deploy then fails with DeclaredProgramIdMismatch — which reads as a program bug and
+    // is actually a missing file. Seed the scratch tree with the real keypair.
+    // ⛔ Passed by PATH in an env var, never committed: this keypair authorises upgrades.
+    if let Ok(kp) = std::env::var("STOCKPUMP_PROGRAM_KEYPAIR") {
+        let dest = root.join("target/deploy");
+        let _ = std::fs::create_dir_all(&dest);
+        let dst = dest.join("stockpump-keypair.json");
+        // ⛔ GUARD, AND IT COST ME THE KEYPAIR ONCE: in the real tree src IS dst, and
+        // fs::copy onto itself TRUNCATES the file to zero. A program keypair is
+        // unrecoverable; on mainnet that is a program that can never be upgraded again.
+        // Compare canonical paths, and only copy when the destination is genuinely missing.
+        let same = std::fs::canonicalize(&kp).ok() == std::fs::canonicalize(&dst).ok()
+            && std::fs::canonicalize(&kp).is_ok();
+        if !same && std::fs::metadata(&dst).map(|m| m.len() == 0).unwrap_or(true) {
+            std::fs::copy(&kp, &dst).expect("failed to seed program keypair");
+        }
+    }
+    let sh = |cmd: &str| -> bool {
+        Command::new("bash").arg("-lc").arg(cmd).current_dir(&root)
+            .env("PATH", format!("{}/.local/share/solana/install/active_release/bin:{}",
+                 std::env::var("HOME").unwrap(), std::env::var("PATH").unwrap_or_default()))
+            .status().map(|s| s.success()).unwrap_or(false)
+    };
+    // `anchor build`, not `cargo build-sbf`: the TS suite resolves the program through
+    // anchor.workspace, which reads target/idl. cargo-mutants runs in a scratch copy that has
+    // no target/, so build-sbf alone deploys a program the tests then cannot find — and the
+    // failure ("ENOENT: scandir target/idl") looks nothing like the missing IDL that it is.
+    assert!(sh("anchor build"), "anchor build failed");
+    assert!(sh("anchor deploy --provider.cluster http://127.0.0.1:8899"), "deploy failed");
+    let home = std::env::var("HOME").unwrap();
+    assert!(
+        sh(&format!("ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 ANCHOR_WALLET={home}/.config/solana/id.json \
+                     npx ts-mocha -p ./tsconfig.json -t 1000000 tests/stockpump.spec.ts")),
+        "TS integration suite failed",
+    );
+}

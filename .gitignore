@@ -9,3 +9,12 @@ mutants.out*/
 fork-ledger/
 fork/*-ata.json
 fork/atas.json
+
+# frontend
+app/node_modules
+app/dist
+# ⛔ BEFORE the first frontend commit, not after: a secret committed once is committed forever,
+# and the rotation that follows is someone else's afternoon.
+app/.env
+app/.env.*
+!app/.env.example

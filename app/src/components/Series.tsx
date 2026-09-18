@@ -31,7 +31,7 @@ function Line({
           <g key={t}>
             <line x1={PAD_L} x2={W - PAD_R} y1={y(t)} y2={y(t)} stroke="var(--hairline)" strokeWidth="1" />
             <text x={PAD_L - 10} y={y(t) + 4} textAnchor="end"
-                  fontSize="11" fill="var(--text-muted)" fontFamily="var(--font-mono)">
+                  fontSize="11" fill="var(--text-3)" fontFamily="var(--font-mono)">
               {format(t)}
             </text>
           </g>
@@ -70,7 +70,7 @@ export function RatchetCharts({ meta, steps }: { meta: Meta; steps: Step[] }) {
             <Line
               key={s.mint}
               pts={pts}
-              stroke="var(--seafoam-600)"
+              stroke="var(--seafoam)"
               height={150}
               format={(v) => v.toFixed(s.decimals)}
               caption={`${s.symbol} per share — y-axis zoomed to the data's own range, because at this size the steps are fractions of a cent`}
@@ -102,7 +102,7 @@ export function StockLegChart({ meta, steps }: { meta: Meta; steps: Step[] }) {
       <div style={{ marginTop: 16 }}>
         <Line
           pts={pts}
-          stroke="var(--cobalt-edge)"
+          stroke="var(--cobalt)"
           height={150}
           format={(v) => v.toFixed(4)}
           caption={`total ${s.symbol} held by the vault`}

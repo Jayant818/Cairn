@@ -12,21 +12,21 @@ export function Provenance({ source }: { source: VaultSource }) {
     <div
       className="card flat"
       style={{
-        borderColor: "var(--peach-glow)",
-        background: "color-mix(in srgb, var(--peach-glow) 12%, var(--surface-card))",
+        borderColor: "var(--orange-wash)",
+        background: "color-mix(in srgb, var(--orange-wash) 12%, var(--surface))",
         padding: "14px 18px", margin: "0 0 24px",
       }}
     >
-      <div style={{ color: "var(--signal-orange)", fontWeight: 600, fontSize: 14 }}>
+      <div style={{ color: "var(--orange)", fontWeight: 600, fontSize: 14 }}>
         Recorded run — not live state
       </div>
-      <div className="caption" style={{ marginTop: 6, color: "var(--text-body)" }}>
+      <div className="caption" style={{ marginTop: 6, color: "var(--text-2)" }}>
         Every figure below was recorded on{" "}
         <span className="mono">{when.toISOString().replace("T", " ").slice(0, 19)} UTC</span>{" "}
         from a {m.cluster}. Nothing here updates. Each transaction signature is listed in the
         feed so you can check the arithmetic rather than take it on trust.
       </div>
-      <ul className="caption" style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)" }}>
+      <ul className="caption" style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-3)" }}>
         {m.caveats.map((c) => <li key={c}>{c}</li>)}
       </ul>
     </div>

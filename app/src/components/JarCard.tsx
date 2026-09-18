@@ -20,11 +20,11 @@ export function JarCard({ meta, latest, first }: { meta: Meta; latest: Step; fir
             <div key={s.mint} style={{ minWidth: 220 }}>
               <div
                 className="mono"
-                style={{ fontSize: 40, fontWeight: 500, color: "var(--seafoam-600)", lineHeight: 1.1 }}
+                style={{ fontSize: 40, fontWeight: 500, color: "var(--seafoam)", lineHeight: 1.1 }}
               >
                 {now === null ? "—" : now.toFixed(s.decimals)}
               </div>
-              <div style={{ marginTop: 6, color: "var(--text-body)", fontSize: 14 }}>
+              <div style={{ marginTop: 6, color: "var(--text-2)", fontSize: 14 }}>
                 {s.symbol} per share
               </div>
               <div className="caption mono" style={{ marginTop: 4 }}>
@@ -34,10 +34,10 @@ export function JarCard({ meta, latest, first }: { meta: Meta; latest: Step; fir
           );
         })}
         <div style={{ minWidth: 200 }}>
-          <div className="mono" style={{ fontSize: 40, fontWeight: 500, color: "var(--text-strong)", lineHeight: 1.1 }}>
+          <div className="mono" style={{ fontSize: 40, fontWeight: 500, color: "var(--text)", lineHeight: 1.1 }}>
             {fromBase(latest.shareSupply, 0).toLocaleString()}
           </div>
-          <div style={{ marginTop: 6, color: "var(--text-body)", fontSize: 14 }}>shares outstanding</div>
+          <div style={{ marginTop: 6, color: "var(--text-2)", fontSize: 14 }}>shares outstanding</div>
           <div className="caption" style={{ marginTop: 4 }}>
             1,000 of them are dead shares, burned at bootstrap and unredeemable
           </div>

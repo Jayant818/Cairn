@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import React from "react";
 // Render the real component tree to a string and assert the page actually says the things
 // the build is conditioned on. No browser: a headless render catches "the component threw"
@@ -21,6 +22,20 @@ const mustNot = (re: RegExp, why: string) => {
 };
 
 must("Recorded run — not live state", "the provenance banner");
+
+// THE FOLD MUST ANSWER "WHAT IS THIS" BEFORE ANY EVIDENCE. The page this replaced opened
+// with proof and never said what the thing was, which is why "ugly" and "the functionality
+// is not clear" turned out to be one complaint.
+must("Put in stock and cash", "the headline");
+must("pays its fee to the pool", "the mechanism line");
+must("already hold tokenized equity", "who it is for");
+must("View the program on Solana Explorer", "the primary action");
+// ⛔ NOT a vault. There is no vault account on a public cluster, and devnet has no real
+// SPYx or USDY, so one could only hold model mints. The recorded run may say vault; the
+// live-cluster copy may not.
+const fold = html.slice(0, html.indexOf("Recorded run"));
+if (/vault/i.test(fold))
+  throw new Error("the fold claims a vault on a public cluster — no vault account exists there");
 must("per share", "the jar card's spelled-out units");
 must("Both counts only rise", "the ratchet charts");
 must("The stock leg, in total", "the cobalt stock-leg chart");
@@ -69,19 +84,31 @@ const section = (heading: string) => {
 };
 
 const stockLeg = section("The stock leg, in total");
-if (!stockLeg.includes("--cobalt-edge"))
+if (!stockLeg.includes("--cobalt"))
   throw new Error("the stock leg is not drawn in the market colour");
-if (stockLeg.includes("--seafoam-600"))
+if (stockLeg.includes("--seafoam"))
   throw new Error("the stock leg wears seafoam — it can FALL, and seafoam means 'only rises'");
 
 const ratchet = section("Both counts only rise");
-if (!ratchet.includes("--seafoam-600"))
+if (!ratchet.includes("--seafoam"))
   throw new Error("the monotone series are not in seafoam");
-if (ratchet.includes("--cobalt-edge"))
+if (ratchet.includes("--cobalt"))
   throw new Error("a monotone series is drawn in the market colour");
 
 const latest = recordedSource.steps().at(-1)!;
 const v = perShare(latest.held[0], latest.shareSupply, 8)!;
 must(v.toFixed(8), "the latest SPYx-per-share figure, rendered from the adapter");
+
+// ⛔ AN UNDEFINED CSS VAR FAILS SILENTLY. The declaration is dropped and the element just
+// inherits, so a missed rename renders wrong without throwing anything. This caught ten
+// stale names after the dark rewrite, and no other check here could have.
+{
+  const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
+  const defined = new Set([...css.matchAll(/^\s+(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
+  const used = new Set([...html.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((m) => m[1]));
+  const missing = [...used].filter((v) => !defined.has(v));
+  if (missing.length) throw new Error(`CSS vars used but never defined: ${missing.join(", ")}`);
+  if (!defined.has("--seafoam")) throw new Error("control failed: index.css was not read");
+}
 
 console.log(`render selfcheck PASS — ${html.length} bytes, colour rules structural, all ${recordedSource.steps().length} signatures present`);

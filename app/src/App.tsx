@@ -1,90 +1,105 @@
 import { recordedSource, plottable, type VaultSource } from "./lib/source";
+import { HeroFold } from "./components/Hero";
 import { Provenance } from "./components/Provenance";
-import { JarCard } from "./components/JarCard";
 import { RatchetCharts, StockLegChart } from "./components/Series";
 import { Feed } from "./components/Feed";
 import { Disclosure } from "./components/Disclosure";
 
-// ⛔ THE ONLY PLACE A SOURCE IS CHOSEN. Every component below takes its data as props, so
-// swapping this line for a live-RPC implementation is the whole of the (b) migration.
-// No component imports the fixture. That is the test for whether this boundary is real.
+// ⛔ THE ONLY PLACE A SOURCE IS CHOSEN. No component imports the fixture; swapping this
+// line for a live-RPC implementation is the whole of the migration. The restyle did not
+// dissolve that boundary and must not.
 const source: VaultSource = recordedSource;
+
+// The artifact that actually exists on a public cluster: the program and its IDL.
+// ⛔ NOT a vault — there is no vault account on devnet, and devnet has no real SPYx or
+// USDY, so one could only ever hold model mints. Do not write "vault" about anything on a
+// public cluster until a vault account exists there.
+const EXPLORER =
+  "https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet";
 
 export default function App() {
   const meta = source.meta();
   const steps = source.steps();
   const series = plottable(steps);
-  const first = series[0];
-  const latest = series[series.length - 1];
 
   return (
     <div className="wrap">
-      <header style={{ padding: "40px 0 24px" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 40, fontWeight: 600 }}>StockPump</h1>
-          <span style={{ color: "var(--text-muted)", fontSize: 18 }}>
-            a vault whose share only gets heavier
-          </span>
-        </div>
-        <p style={{ maxWidth: 680, marginTop: 12, color: "var(--text-body)" }}>
-          Deposit tokenized S&amp;P 500 and tokenized dollars together. Every deposit pays a fee
-          to the vault rather than to anyone, so the quantity of each asset standing behind a
-          single share goes up and never comes back down. There is no price in the program and
-          no oracle in the money path — the claim is a count, and a count is checkable.
-        </p>
-        <div className="mono caption" style={{ marginTop: 10 }}>
-          program {meta.programId} · fee {meta.feeBps} bps
-        </div>
-      </header>
+      <HeroFold meta={meta} steps={steps} explorerUrl={EXPLORER} />
 
       <Provenance source={source} />
-      <JarCard meta={meta} latest={latest} first={first} />
-      <RatchetCharts meta={meta} steps={series} />
-      <StockLegChart meta={meta} steps={series} />
-      <Disclosure meta={meta} />
-      <Feed meta={meta} steps={steps} />
 
-      <section className="card" style={{ padding: 24 }}>
-        <h2 style={{ fontSize: 20 }}>Redeeming</h2>
-        <p style={{ color: "var(--text-body)", maxWidth: 680, marginTop: 8 }}>
-          You can redeem both legs, or either one alone. Taking one leg is allowed — you might
-          want out of the stock and not the cash, or the issuer might have frozen one of them.
-        </p>
-        <p style={{ color: "var(--signal-orange)", maxWidth: 680, marginTop: 12, fontWeight: 500 }}>
-          Taking one leg still burns your shares in full. It is not a discount and it is not a
-          partial exit: the assets you leave behind stay in the vault and raise everyone else's
-          count. The recording above contains a real example of that, on the last row.
-        </p>
-        <div style={{ display: "flex", gap: 12, marginTop: 20, flexWrap: "wrap" }}>
-          <button
-            disabled
-            style={{
-              background: "var(--cta-fill)", color: "var(--cta-text)", border: "none",
-              borderRadius: "var(--radius-lg)", padding: "12px 22px", fontSize: 15,
-              fontFamily: "var(--font-sans)", fontWeight: 500, opacity: 0.55, cursor: "not-allowed",
-            }}
-          >
-            Deposit
-          </button>
-          <button
-            disabled
-            style={{
-              background: "transparent", color: "var(--cta-fill)",
-              border: "1px solid var(--cta-fill)", borderRadius: "var(--radius-lg)",
-              padding: "12px 22px", fontSize: 15, fontFamily: "var(--font-sans)",
-              fontWeight: 500, opacity: 0.55, cursor: "not-allowed",
-            }}
-          >
-            Redeem
-          </button>
-          <span className="caption" style={{ alignSelf: "center" }}>
-            Disabled in the recording — signing needs a live cluster, and this page has none.
-          </span>
+      {/* Feature STACK, in the order his complaint demands: what it is, how it works, what
+          it costs you, what can go wrong — THEN the evidence. The old page ran the evidence
+          first and never answered the earlier questions. */}
+      <section className="band">
+        <div className="eyebrow">How the ratchet works</div>
+        <h2 className="display display-md" style={{ marginTop: 12 }}>The fee stays in the pool</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+                      gap: 28, marginTop: 24 }}>
+          <div>
+            <div style={{ color: "var(--text)", fontWeight: 500 }}>Deposit both legs</div>
+            <p className="caption" style={{ marginTop: 6 }}>
+              You put in {meta.sleeves.map((s) => s.symbol).join(" and ")} together and receive
+              shares. You are credited the smaller of the two ratios, so a lopsided deposit
+              cannot mint more shares than the assets justify.
+            </p>
+          </div>
+          <div>
+            <div style={{ color: "var(--text)", fontWeight: 500 }}>
+              The fee is not routed anywhere
+            </div>
+            <p className="caption" style={{ marginTop: 6 }}>
+              {meta.feeBps} basis points stay in the pool. That is the entire mechanism: the
+              count behind every existing share goes up, including yours.
+            </p>
+          </div>
+          <div>
+            <div style={{ color: "var(--text)", fontWeight: 500 }}>Nothing can lower it</div>
+            <p className="caption" style={{ marginTop: 6 }}>
+              Redemption burns shares against the assets it takes, so the ratio holds. There
+              is no price in the program and no oracle in the money path.
+            </p>
+          </div>
         </div>
       </section>
 
-      <footer className="caption" style={{ marginTop: 32, borderTop: "1px solid var(--hairline)", paddingTop: 16 }}>
-        Share mint <span className="mono">{meta.shareMint}</span>
+      {/* PROMOTED above the charts: this is what it costs a user, and it was buried. */}
+      <section className="band">
+        <div className="eyebrow" style={{ color: "var(--orange)" }}>Before you redeem</div>
+        <h2 className="display display-md" style={{ marginTop: 12 }}>
+          Taking one leg burns your shares in full
+        </h2>
+        <p className="lede" style={{ marginTop: 16 }}>
+          You can redeem both legs, or either one alone — you might want out of the stock and
+          not the cash, or the issuer might have frozen one of them.
+        </p>
+        <p className="lede" style={{ marginTop: 12, color: "var(--orange)" }}>
+          It is not a discount and not a partial exit. The assets you leave behind stay in the
+          pool and raise everyone else&apos;s count. The recording below contains a real
+          example on its last row.
+        </p>
+      </section>
+
+      <Disclosure meta={meta} />
+
+      <section className="band">
+        <div className="eyebrow">Evidence</div>
+        <h2 className="display display-md" style={{ marginTop: 12 }}>
+          Every number here came off a chain
+        </h2>
+        <p className="lede" style={{ marginTop: 14 }}>
+          One recorded run against a fork of mainnet, carrying the real SPYx and USDY mints.
+          Nine transactions, each listed with its signature.
+        </p>
+      </section>
+
+      <RatchetCharts meta={meta} steps={series} />
+      <StockLegChart meta={meta} steps={series} />
+      <Feed meta={meta} steps={steps} />
+
+      <footer className="caption" style={{ marginTop: 40, borderTop: "1px solid var(--hairline)", paddingTop: 20 }}>
+        <div>program <span className="mono">{meta.programId}</span> · fee {meta.feeBps} bps</div>
+        <div style={{ marginTop: 4 }}>share mint <span className="mono">{meta.shareMint}</span></div>
       </footer>
     </div>
   );

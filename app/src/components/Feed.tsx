@@ -34,12 +34,12 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
                   className="mono"
                   style={{
                     fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em",
-                    color: s.kind === "redeem" ? "var(--cobalt-edge)" : "var(--seafoam-700)",
+                    color: s.kind === "redeem" ? "var(--cobalt)" : "var(--accent)",
                   }}
                 >
                   {s.kind}
                 </span>
-                <span style={{ marginLeft: 10, color: "var(--text-body)", fontSize: 14 }}>
+                <span style={{ marginLeft: 10, color: "var(--text-2)", fontSize: 14 }}>
                   {s.label}
                 </span>
                 {s.kind === "bootstrap" && (
@@ -50,7 +50,7 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
                 {partial && (
                   <div
                     className="caption"
-                    style={{ color: "var(--signal-orange)", marginTop: 4, fontWeight: 500 }}
+                    style={{ color: "var(--orange)", marginTop: 4, fontWeight: 500 }}
                   >
                     Took the cash leg only — and still burned{" "}
                     <span className="mono">{fromBase(s.sharesBurned ?? "0", 0)}</span> shares in
@@ -64,7 +64,7 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
                   {meta.sleeves.map((sl, i) => {
                     const v = perShare(s.held[i], s.shareSupply, sl.decimals);
                     return (
-                      <span key={sl.mint} style={{ marginLeft: 12, color: "var(--seafoam-600)" }}>
+                      <span key={sl.mint} style={{ marginLeft: 12, color: "var(--seafoam)" }}>
                         {v === null ? "—" : v.toFixed(sl.decimals)} {sl.symbol}/sh
                       </span>
                     );

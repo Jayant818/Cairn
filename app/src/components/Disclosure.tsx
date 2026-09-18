@@ -11,14 +11,14 @@ export function Disclosure({ meta }: { meta: Meta }) {
       className="card flat"
       style={{
         padding: "16px 20px", marginBottom: 24,
-        borderColor: "var(--signal-orange)",
-        background: "color-mix(in srgb, var(--peach-glow) 14%, var(--surface-card))",
+        borderColor: "var(--orange)",
+        background: "color-mix(in srgb, var(--orange-wash) 14%, var(--surface))",
       }}
     >
-      <div style={{ color: "var(--signal-orange)", fontWeight: 600, fontSize: 14 }}>
+      <div style={{ color: "var(--orange)", fontWeight: 600, fontSize: 14 }}>
         What the issuers can still do to your assets
       </div>
-      <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "var(--text-body)", fontSize: 14 }}>
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "var(--text-2)", fontSize: 14 }}>
         <li>
           {stock.symbol} carries a <strong>permanent delegate</strong> and a{" "}
           <strong>transfer hook</strong>, and both sit under the <em>same</em> key. One

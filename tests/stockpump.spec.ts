@@ -38,6 +38,32 @@ describe("stockpump vault", () => {
   let vAta0: PublicKey, vAta1: PublicKey, uAta0: PublicKey, uAta1: PublicKey;
   let deadShareAta: PublicKey, userShareAta: PublicKey;
 
+/// Balances AT EXECUTION, read from the transaction receipt.
+  ///
+  /// ⛔ NOT a before-read and an after-read of the account. Two reads across a transaction race:
+  /// the after-read can still return the pre-transaction view, which is byte-identical to "the
+  /// operation did nothing" — that produced a false "depositor got 0, fair is 99" and a false
+  /// "sleeve 1 not paid" earlier today.
+  /// ⛔ AND NOT the vault's `held` alone. Asserting only on `held` is what let
+  /// `replace transfer_out -> Ok(())` survive mutation testing: `held` is decremented on a
+  /// separate line from the transfer, so a vault that burns your shares and sends NOTHING
+  /// satisfies it. Curing the race by dropping the balance check removed the only assertion
+  /// that the tokens actually moved.
+  /// The receipt is recorded at execution, so it cannot race, and it proves real movement.
+  const deltaFromReceipt = async (sig: string, account: PublicKey): Promise<bigint> => {
+    const tx = await connection.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    assert.isNotNull(tx, `no receipt for ${sig}`);
+    const keys = tx!.transaction.message.getAccountKeys({
+      accountKeysFromLookups: tx!.meta?.loadedAddresses,
+    });
+    let idx = -1;
+    for (let i = 0; i < keys.length; i++) if (keys.get(i)!.equals(account)) { idx = i; break; }
+    assert.isAtLeast(idx, 0, "account not in the transaction");
+    const pre = tx!.meta!.preTokenBalances!.find((b) => b.accountIndex === idx);
+    const post = tx!.meta!.postTokenBalances!.find((b) => b.accountIndex === idx);
+    return BigInt(post?.uiTokenAmount.amount ?? "0") - BigInt(pre?.uiTokenAmount.amount ?? "0");
+  };
+
   const ratios = async () => {
     const v: any = await program.account.vault.fetch(vault);
     const supply = (await getMint(connection, shareMint.publicKey, "confirmed", T22)).supply;
@@ -257,31 +283,74 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
 
   it("redeem with sleeve_mask = 0b01 pays ONLY sleeve 0 and still burns the shares", async function () {
     this.timeout(60_000);
-    // redeem a slice of what the REDEEMER actually holds. The 1,000 dead shares sit in the
-    // vault's own account, not the user's — counting them as redeemable is the mistake the
-    // dead-share design exists to make impossible, and the first draft of this test made it.
+    // Same discipline as the 0b10 test: the property is WHICH BRANCH RAN, and the vault's own
+    // `held` is the program's record of that. Comparing a before-read and an after-read of a
+    // token ACCOUNT across a transaction reintroduces the race that reported "depositor got 0,
+    // fair is 99" earlier — the after-read can still return the pre-transaction view, which is
+    // indistinguishable from "nothing happened".
     const heldShares = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
     assert.isTrue(heldShares > 0n, "depositor holds no shares to redeem");
     const shares = heldShares / 2n;
-    const b0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
-    const b1 = (await getAccount(connection, uAta1, "confirmed", TOKEN_PROGRAM_ID)).amount;
-    const bs = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
+    const hb: any = await program.account.vault.fetch(vault);
+    const hb0 = BigInt(hb.sleeves[0].held.toString()), hb1 = BigInt(hb.sleeves[1].held.toString());
+    const sb = (await getMint(connection, shareMint.publicKey, "confirmed", T22)).supply;
 
-    await program.methods.redeem(new BN(shares.toString()), 0b01).accounts({
+    const sig = await program.methods.redeem(new BN(shares.toString()), 0b01).accounts({
       redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
-      redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
+      redeemerShareAta: userShareAta,
+      tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
     }).rpc({ commitment: "confirmed" });
 
-    const a0 = (await getAccount(connection, uAta0, "confirmed", T22)).amount;
-    const a1 = (await getAccount(connection, uAta1, "confirmed", TOKEN_PROGRAM_ID)).amount;
-    const as_ = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
-    assert.isTrue(a0 > b0, "sleeve 0 not paid");
-    assert.equal(a1, b1, "sleeve 1 paid despite being masked out");
-    // USER-PROTECTING, stated as a warning rather than hidden: taking one leg still burns
-    // the full share count. That is the user's choice, not a discount, and the UI must say so.
-    assert.equal(bs - as_, shares, "shares not burned in full");
+    const ha: any = await program.account.vault.fetch(vault);
+    const ha0 = BigInt(ha.sleeves[0].held.toString()), ha1 = BigInt(ha.sleeves[1].held.toString());
+    const sa = (await getMint(connection, shareMint.publicKey, "confirmed", T22)).supply;
+    assert.isTrue(ha0 < hb0, "sleeve 0 was not debited");
+    assert.equal(ha1, hb1, "sleeve 1 was debited despite being masked out");
+    // AND the tokens actually moved — `held` alone cannot tell a payout from a no-op.
+    assert.equal(await deltaFromReceipt(sig, uAta0), hb0 - ha0, "sleeve 0 debited but the user was not paid");
+    assert.equal(await deltaFromReceipt(sig, uAta1), 0n, "sleeve 1 moved despite being masked out");
+    // USER-PROTECTING, stated as a warning rather than hidden: taking one leg still burns the
+    // FULL share count. That is the user's choice, not a discount, and the UI must say so.
+    assert.equal(sb - sa, shares, "shares not burned in full");
+  });
+
+  it("redeem with sleeve_mask = 0b10 leaves SLEEVE 0 untouched", async function () {
+    this.timeout(60_000);
+    // ⛔ THIS TEST EXISTS BECAUSE A MUTANT SURVIVED. `replace & with |` on
+    //    `if sleeve_mask & 0b01 != 0` yields `(sleeve_mask | 0b01) != 0`, which is ALWAYS
+    //    true — sleeve 0 pays out regardless of the mask. Every redeem test used a mask where
+    //    sleeve 0 was SUPPOSED to fire (0b01 here, 0b11 in the fork spec), so nothing ever
+    //    required that branch to evaluate FALSE. Same asymmetry as the math.rs survivors:
+    //    one direction checked, the mirror assumed.
+    // ⚠️ And it is not cosmetic. A user redeeming 0b10 because SPYx is FROZEN is precisely
+    //    the case sleeve_mask exists for — the branch whose purpose is to not fire.
+    const heldShares = (await getAccount(connection, userShareAta, "confirmed", T22)).amount;
+    const shares = heldShares / 4n;
+    assert.isTrue(shares > 0n, "no shares to redeem");
+    // ⛔ ASSERT ON THE VAULT'S OWN `held`, NOT ON TWO ATA READS. The property is "which branch
+    // ran", and `held` is the program's record of exactly that — one fetch after the tx, so
+    // there is no window between a before-read and an after-read for a stale view to slip into.
+    // The first version of this test compared user ATA balances and reported a1 == b1 while
+    // `held` showed the transfer had happened: two reads, one race, a false negative.
+    const hb: any = await program.account.vault.fetch(vault);
+    const hb0 = BigInt(hb.sleeves[0].held.toString()), hb1 = BigInt(hb.sleeves[1].held.toString());
+
+    const sig = await program.methods.redeem(new BN(shares.toString()), 0b10).accounts({
+      redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
+      sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
+      vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
+      redeemerShareAta: userShareAta,
+      tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID, shareTokenProgram: T22,
+    }).rpc({ commitment: "confirmed" });
+
+    const ha: any = await program.account.vault.fetch(vault);
+    const ha0 = BigInt(ha.sleeves[0].held.toString()), ha1 = BigInt(ha.sleeves[1].held.toString());
+    assert.equal(ha0, hb0, "sleeve 0 was debited despite being masked OUT");
+    assert.isTrue(ha1 < hb1, "sleeve 1 was not debited");
+    assert.equal(await deltaFromReceipt(sig, uAta1), hb1 - ha1, "sleeve 1 debited but the user was not paid");
+    assert.equal(await deltaFromReceipt(sig, uAta0), 0n, "sleeve 0 moved despite being masked OUT");
   });
 
   it("redeem rejects an empty mask and an undefined bit", async function () {

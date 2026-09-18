@@ -63,6 +63,31 @@ port.** And the rule that generalises past this repo: **when a local build
 disagrees with a deployed one, ask who else deploys here before asking anything
 about the code.**
 
+## The devnet deploy has NO UPGRADE HEADROOM
+
+⛔ **A future build even one byte larger than the current one cannot be upgraded
+in place.** Run `solana program extend <PROGRAM_ID> <ADDITIONAL_BYTES>` first.
+
+Why, because the cause is not obvious and the failure will not name it: a normal
+`anchor deploy` writes a fresh buffer and sizes programdata at `45 + 2 * so`,
+which reserves room to grow. On 2026-09-19 the deploy finished from a buffer
+left behind by an earlier attempt that had failed with `Max retries exceeded`.
+Deploying **from** an existing buffer sizes programdata to **the buffer**, so it
+is `37 + so` with nothing spare.
+
+Measured on devnet at the time: programdata held exactly 1.67736012 SOL for
+330,053 bytes, not 3.3538414 SOL for 660,077 bytes. The buffer's lamports became
+the program.
+
+⭐ This is a property of **how** it was deployed, not of the program. A rebuild
+that happens to be smaller will upgrade fine, which makes the wall intermittent
+and therefore worse.
+
+⚠️ Rent is **not** the same on every cluster. The same 660,077 bytes price at
+3.3538414 SOL on devnet and 4.5950268 SOL on a local test validator, ~37% apart.
+Measure rent on the cluster you are spending on, or state which cluster the
+number came from.
+
 ## Running `solana` from this directory
 
 ⛔ The machine's global config carries `Keypair Path: ./summit-devnet-keypair.json`

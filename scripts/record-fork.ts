@@ -71,6 +71,22 @@ async function main() {
   if (m0.data.length !== 676) throw new Error(`SPYx is not the mainnet account (${m0.data.length} B)`);
   if (m1.data.length !== 82) throw new Error(`USDY is not the mainnet account (${m1.data.length} B)`);
 
+  // ⛔ THE VAULT PDA IS A SINGLETON PER STOCK — seeded on [b"vault", SPYx] — so a fork that
+  // has already been recorded against, or that `fork.spec.ts` has run on, cannot be recorded
+  // again. Without this the failure is `already in use` from deep inside Anchor, which reads
+  // as a program bug and is actually a dirty ledger. Same singleton property that showed up
+  // as a DESIGN defect on 2026-09-17; here it bites the tooling instead.
+  // ⚠️ AND IT CUTS BOTH WAYS: after a recording, `tests/fork.spec.ts` fails on this same
+  // vault. Recording and the fork suite each need their own fresh `./fork/setup.sh`.
+  {
+    const [probe] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), SPYX.toBuffer()], program.programId);
+    if (await connection.getAccountInfo(probe))
+      throw new Error(
+        `the fork already holds a vault at ${probe.toBase58()} — the PDA is a singleton per ` +
+        `stock, so re-run ./fork/setup.sh for a clean ledger before recording`);
+  }
+
   const shareMint = Keypair.generate();
   const [vault] = PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), SPYX.toBuffer()], program.programId);

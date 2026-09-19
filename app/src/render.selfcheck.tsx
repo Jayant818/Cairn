@@ -60,6 +60,30 @@ for (const s of recordedSource.steps())
 must("var(--seafoam)", "the monotone series in seafoam");
 must("var(--cobalt)", "the loss-absorption line in the market colour");
 
+// ── the hero must be VISIBLE AT REST ────────────────────────────────────────
+// ⛔ THIS SHIPPED BROKEN ONCE. The staircase's resting state was stroke-dashoffset 0.98,
+// i.e. 98% HIDDEN, and only rAF revealed it — so SSR, reduced-motion users, screenshots,
+// crawlers and OG cards all saw an empty black half-fold. The geometry was perfect and
+// every existing check passed, because they all asked whether the element EXISTS.
+// ⭐ A check that reads the DOM cannot see a paint — but it CAN see this, because the
+// resting offset is in the markup. This closes the specific hole, not the general one.
+{
+  const m = html.match(/stroke-dashoffset:\s*([0-9.]+)/);
+  if (!m) throw new Error("control failed: no stroke-dashoffset in the markup at all");
+  if (Number(m[1]) !== 0)
+    throw new Error(`the hero is ${(Number(m[1]) * 100).toFixed(1)}% hidden at rest — ` +
+                    `animation must be an enhancement, never the only path to visible`);
+}
+
+// ── orange is spent ONCE, and only on issuer risk ───────────────────────────
+// ⛔ It was spent FOUR times: the feed, two places in the staircase, and the risk box.
+// Colouring the last-riser annotation orange says "danger" about the product's best moment
+// and drains the one signal that has to mean something.
+{
+  const n = (html.match(/var\(--orange\)/g) ?? []).length;
+  if (n !== 1) throw new Error(`orange used ${n}x — the ruling is ONCE, on issuer risk only`);
+}
+
 // ── an undefined CSS var fails SILENTLY, so cross-reference every one used ──
 {
   const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
@@ -82,7 +106,11 @@ must("var(--cobalt)", "the loss-absorption line in the market colour");
 // and identifiers do not. The feed is nine transaction ROWS — labels and amounts are data.
 // The two hero lines are fixed by the ruling and excluded.
 const HERO_LINES = [
-  "A pot of tokenized",           // the ruled H1
+  "A pot of tokenized",           // the ruled H1, first clause
+  "— so the stock behind your",   // ...and its tail: the h1 is SPLIT ACROSS TWO ELEMENTS for
+                                  // treatment, so the counter sees two blocks where the
+                                  // ruling has one sentence. Anchored on the exact ruled
+                                  // clause so the exclusion cannot quietly swallow new prose.
   "You already hold tokenized",   // the ruled sub
 ];
 const noMono = html.replace(/<(span|div|a)[^>]*class="[^"]*mono[^"]*"[^>]*>.*?<\/\1>/g, " ");

@@ -19,11 +19,17 @@ const LABELS: Record<string, string> = {
 export function Staircase({ meta, steps }: { meta: Meta; steps: Step[] }) {
   const series = plottable(steps);
   const ys = series.map((s) => perShare(s.held[0], s.shareSupply, meta.sleeves[0].decimals)!);
-  const [t, setT] = useState(0);
+  // starts at 1 = fully drawn. If the effect never runs, the chart is simply there.
+  const [t, setT] = useState(1);
 
   // ~2s draw, and the number ticks with it so the reader watches the claim accrue rather
   // than being handed the total.
   useEffect(() => {
+    // ⛔ Respect prefers-reduced-motion: skip the draw entirely rather than animating
+    // quickly. There was no motion guard anywhere in src/ before this.
+    if (typeof matchMedia === "function" &&
+        matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    setT(0);                                   // only now is hiding it safe
     const start = performance.now(), DUR = 2000;
     let raf = 0;
     const tick = (now: number) => {
@@ -71,7 +77,7 @@ export function Staircase({ meta, steps }: { meta: Meta; steps: Step[] }) {
             <g key={s.signature} style={{ opacity: 0.9 }}>
               <circle cx={x(i)} cy={y(ys[i])} r="3" fill="var(--seafoam)" />
               <text x={x(i)} y={y(ys[i]) - 10} textAnchor={last ? "end" : "middle"}
-                    fontSize="10" fill={last ? "var(--orange)" : "var(--text-3)"}
+                    fontSize="10" fill="var(--text-3)"
                     fontFamily="var(--font-sans)">
                 {LABELS[key] ?? s.kind}
               </text>
@@ -81,7 +87,7 @@ export function Staircase({ meta, steps }: { meta: Meta; steps: Step[] }) {
       </svg>
       {/* ⛔ The honesty label lives ON the graphic, per the ruling — not in a banner a
           reader can scroll past before the chart has made its impression. */}
-      <div className="small" style={{ color: "var(--orange)", marginTop: -8 }}>
+      <div className="small" style={{ color: "var(--text-2)", marginTop: -8 }}>
         Last step: a redeemer took cash only, leaving their stock. That is +4.1172
         of +4.7245 points. The fee ratchet alone is +0.5833%.
       </div>

@@ -45,7 +45,10 @@ export default function App() {
           <div style={{ position: "relative" }}>
             <h1>
               A pot of tokenized S&amp;P 500 and dollars where everyone who comes in or goes
-              out leaves 1% behind — so the stock behind your share only ever goes up.
+              out leaves 1% behind
+              <span className="h1-tail">
+                {" "}— so the stock behind your share only ever goes up.
+              </span>
             </h1>
             <p className="lead" style={{ marginTop: 22 }}>
               You already hold tokenized stock. Deposit it, take a share, and own more stock

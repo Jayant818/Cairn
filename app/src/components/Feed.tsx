@@ -47,7 +47,7 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
                 {partial && (
                   <div
                     className="caption"
-                    style={{ color: "var(--orange)", marginTop: 4, fontWeight: 500 }}
+                    style={{ color: "var(--text-3)", marginTop: 4, fontWeight: 500 }}
                   >
                     Cash leg only — shares burned in full.
                   </div>

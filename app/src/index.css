@@ -65,8 +65,14 @@ a { color: var(--text); text-decoration-color: var(--text-3); }
   text-transform: uppercase; letter-spacing: 2px; color: var(--text-3);
 }
 h1, h2, h3 { margin: 0; color: var(--text); font-family: var(--font-display); }
-h1 { font-size: clamp(30px, 3.9vw, 48px); font-variation-settings: 'wdth' 118, 'wght' 650;
-     line-height: 1.12; letter-spacing: -.01em; }
+/* 2.4rem bucket, not the 48px display: 28 words at 48px ran to eight lines and buried the
+   CTA. Their h1 is three lines; this is the treatment that gets there without touching a
+   word of the sentence. */
+h1 { font-size: clamp(26px, 2.9vw, 2.4rem); font-variation-settings: 'wdth' 116, 'wght' 640;
+     line-height: 1.18; letter-spacing: -.005em; }
+.h1-tail { display: block; margin-top: 12px; font-family: var(--font-sans);
+           font-size: 20px; font-weight: 400; line-height: 1.5;
+           font-variation-settings: normal; letter-spacing: .24px; color: var(--text-2); }
 h2 { font-size: 2.2rem; font-variation-settings: 'wdth' 115, 'wght' 620; line-height: 1.2; }
 h3 { font-size: 1.15rem; font-variation-settings: 'wdth' 112, 'wght' 600; }
 .lead { font-size: 20px; color: var(--text-2); }

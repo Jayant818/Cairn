@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check": "tsx src/lib/source.selfcheck.ts && tsx src/lib/upgradeAuthority.selfcheck.ts && tsx --tsconfig tsconfig.app.json src/render.selfcheck.tsx"
+    "check": "tsx src/lib/source.selfcheck.ts && tsx src/lib/upgradeAuthority.selfcheck.ts && tsx src/lib/issuerControls.selfcheck.ts && tsx --tsconfig tsconfig.app.json src/render.selfcheck.tsx"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

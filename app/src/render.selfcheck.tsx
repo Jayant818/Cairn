@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import App from "./App";
 import { recordedSource, perShare, plottable } from "./lib/source";
+import { recordedControls, topology, issuerDisclosure } from "./lib/issuerControls";
 
 const html = renderToStaticMarkup(<App />);
 const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -53,6 +54,27 @@ must("Its dollar value still falls", "the loss-absorption disclosure that replac
 // every signature still reachable
 for (const s of recordedSource.steps())
   if (!html.includes(s.signature)) throw new Error(`signature ${s.signature.slice(0, 8)} missing`);
+
+// ── the issuer-risk line must BE the derived one ────────────────────────────
+// ⛔ THE ONE THAT SHIPPED FALSE. "SPYx's issuer can freeze or seize it — one key does both"
+// was live on the public page for four days. issuerControls.selfcheck.ts proves the
+// GENERATOR is right about the recording; this proves the PAGE is printing the generator's
+// output and not a sentence somebody typed next to it. Those are different failures and the
+// second one is the one that actually happened.
+// ⛔ RETIRED, NOT DELETED — Jayant ruled the issuer-risk line off the page 2026-09-20 02:50.
+// This asserted that the page printed `issuerDisclosure(topology(m))` for every recorded
+// mint, i.e. a sentence DERIVED from measured mint topology rather than typed by a human.
+// ⭐ The generator and its controls in lib/ are left INTACT and unused, so restoring this is
+// one uncommented block and not a rebuild. The ruling changed, so the check changed with it,
+// in the same commit, with the reason written down — it was not quietly relaxed to go green.
+// if (true) {
+//   const text = plain.replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
+//   for (const m of recordedControls) {
+//     const want = issuerDisclosure(topology(m));
+//     if (!text.includes(want))
+//       throw new Error(`the page does not print the derived disclosure for ${m.symbol}: ${want}`);
+//   }
+// }
 
 // ── colour semantics, structurally ──────────────────────────────────────────
 // seafoam is on the monotone series; the loss-absorption line is cobalt; orange appears for
@@ -128,7 +150,15 @@ must("var(--cobalt)", "the loss-absorption line in the market colour");
   let n = (html.match(/style="[^"]*var\(--orange\)/g) ?? []).length;
   for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)[^{]*\{[^}]*var\(--orange\)[^}]*\}/g))
     n += classCount(m[1]);
-  if (n !== 1) throw new Error(`orange painted ${n}x — the ruling is ONCE, on issuer risk only`);
+  // ⛔ RULED BY JAYANT 2026-09-20 02:50: the issuer-risk line is REMOVED from the page.
+  // The assertion did not get deleted with it, it got MOVED — equality, now at zero, so
+  // orange cannot quietly reappear anywhere. ⛔ NEVER relax this to `n >= 0`: that asserts
+  // nothing at all and would go green on any future misuse.
+  if (n !== 0) throw new Error(`orange painted ${n}x — the ruling is ZERO since 2026-09-20`);
+  // ⛔ AND THE TEXT MUST BE GONE TOO. A disclosure that loses its colour but keeps its words
+  // is the worst of the three states: still present, no longer reading as a warning.
+  if (/freeze or seize|freeze or pause|permanent delegate|one key does both/i.test(plain))
+    throw new Error("the issuer-risk sentence is back in the page text without its colour");
   // control: the counter must see a colour that IS on the page more than once
   let sf = (html.match(/style="[^"]*var\(--seafoam\)/g) ?? []).length;
   for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)[^{]*\{[^}]*var\(--seafoam\)[^}]*\}/g))
@@ -227,3 +257,4 @@ if (blocks.length < 4) throw new Error("control failed: the prose scan found alm
 
 console.log(`render selfcheck PASS — ${html.length} B · prose ${prose}/80 words · all ${recordedSource.steps().length} signatures`);
 void perShare;
+void issuerDisclosure; void topology; void recordedControls;  // retired above, kept live

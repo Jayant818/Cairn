@@ -1,10 +1,18 @@
 import { recordedSource, type VaultSource } from "./lib/source";
+import { recordedControls, topology, issuerDisclosure } from "./lib/issuerControls";
 import { Staircase } from "./components/Staircase";
 import { Feed } from "./components/Feed";
 import { GlyphFee, GlyphRatchet, GlyphInKind } from "./components/Glyphs";
 
 // ⛔ THE ONLY PLACE A SOURCE IS CHOSEN. No component imports the fixture.
 const source: VaultSource = recordedSource;
+
+// ⚠️ Ordered by the pot's own sleeve order, not by the recorder's file order, so the risk
+// line always leads with the stock leg the rest of the page is about.
+const sleeveControls = recordedSource
+  .meta()
+  .sleeves.map((s) => recordedControls.find((m) => m.mint === s.mint))
+  .filter((m): m is NonNullable<typeof m> => Boolean(m));
 
 // The artifact that exists on a public cluster: the program. ⛔ NOT a vault — no vault
 // account exists there, and devnet has no real SPYx or USDY.
@@ -99,17 +107,31 @@ export default function App() {
         </div>
       </section>
 
-      {/* 7. ISSUER RISK — orange, once.
-          ⛔ THE PREVIOUS WORDING WAS FALSE AND WAS LIVE ON THE PUBLIC PAGE. It said "one key
-          does both". Measured at the mint: seize is the permanent delegate 5aMNNLQJ…, freeze
-          is a SEPARATE freezeAuthority JDq14BWv…, and that second key also holds
-          pausableConfig. Two keys, three powers. ⭐ The correction is strictly WORSE for the
-          issuer than the false version — three powers where the page claimed two, plus a
-          global pause we had never mentioned — so it cannot be read as a softening. */}
+      {/* 7. ISSUER RISK — orange, once. ⛔ THE SENTENCE IS DERIVED, NOT TYPED.
+          The previous wording was false and was LIVE: "SPYx's issuer can freeze or seize it
+          — one key does both". The chain says seize is the permanent delegate and freeze is
+          a DIFFERENT key that also holds pausableConfig. Two keys, three powers. ⭐ It rotted
+          in the FLATTERING direction, which is why four days passed without a complaint.
+          ⛔ AND USDY WAS MISSING ENTIRELY. It is classic SPL with no delegate and no pause,
+          but it has a freeze authority, and a frozen pot ATA breaks redeem exactly as hard.
+          The keys are printed so a reader can check this page against the chain themselves —
+          which is the thing nobody could do with the old line. */}
       <section className="sec sec-risk">
         <div className="container risk">
-          Backed can seize {meta.sleeves[0].symbol} with a permanent delegate, and freeze or
-          pause it with a second key.
+          {sleeveControls.map((m) => (
+            <span key={m.mint}>{issuerDisclosure(topology(m))} </span>
+          ))}
+          <div className="risk-keys">
+            {sleeveControls.map((m) => topology(m)).flatMap((t) =>
+              t.kind === "held"
+                ? t.groups.map((g) => (
+                    <div className="mono caption" key={t.symbol + g.key}>
+                      {t.symbol} {g.powers.join(" + ")} · {g.key}
+                    </div>
+                  ))
+                : [],
+            )}
+          </div>
         </div>
       </section>
 

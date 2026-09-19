@@ -411,6 +411,40 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
     } catch (e: any) { assert.match(String(e), /ConstraintHasOne|has_one|Unauthorized|2001/); }
   });
 
+  // ⛔ THE BOUNDARY, AND THE REASON IT IS WRITTEN OUT LONGHAND: `enforce_caps` compares with
+  // `next_held[i] <= deposit_cap` INSIDE A `require!`, and cargo-mutants does not mutate
+  // inside macro expansions. The lib.rs run scores 18/18 caught and CANNOT reach that `<=`.
+  // Flip it to `<` by hand and every other cap test still passes: "crosses the cap" still
+  // rejects, redeem still ignores the cap, a zero cap is still refused at initialize. Only
+  // this one fails. ⭐ 18/18 CERTIFIES THE INSTRUMENT, NOT THE POPULATION — the score was
+  // perfect over the mutants the tool could generate, which is a different set from the
+  // mutations that would break the program.
+  it("a deposit landing EXACTLY on the cap is accepted — the boundary is inclusive", async function () {
+    this.timeout(60_000);
+    const v0: any = await program.account.vault.fetch(vault);
+    const held0 = BigInt(v0.sleeves[0].held.toString());
+    const amount = 1_000_000n;             // large enough to mint a share; DepositTooSmall
+                                           // fires before enforce_caps, so dust cannot test this
+    // Set the cap to exactly where this deposit lands, rather than depositing up to an
+    // existing cap: the equality has to be arranged, never hoped for.
+    await program.methods.setDepositCap(0, new BN((held0 + amount).toString()))
+      .accounts({ authority: authority.publicKey, vault }).rpc({ commitment: "confirmed" });
+
+    await program.methods.deposit([new BN(amount.toString()), new BN(amount.toString())]).accounts({
+      depositor: authority.publicKey, vault, shareMint: shareMint.publicKey,
+      sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
+      vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
+      depositorShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID,
+      shareTokenProgram: T22,
+    }).rpc({ commitment: "confirmed" });
+
+    const v1: any = await program.account.vault.fetch(vault);
+    assert.equal(v1.sleeves[0].held.toString(), (held0 + amount).toString(),
+      "held did not land exactly on the cap — the test is no longer testing the boundary");
+    assert.equal(v1.sleeves[0].depositCap.toString(), v1.sleeves[0].held.toString(),
+      "held == cap is the whole point of this test");
+  });
+
   it("a deposit that would cross the cap is REJECTED WHOLE, and the vault is unchanged", async function () {
     this.timeout(60_000);
     const v0: any = await program.account.vault.fetch(vault);

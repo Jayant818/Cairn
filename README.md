@@ -152,12 +152,22 @@ Not fine print. Measured at the mints on 2026-09-18:
 
 | suite | result |
 |---|---|
-| local (`stockpump.spec.ts`) | 16 passing |
+| local (`stockpump.spec.ts`) | 17 passing |
 | Token-2022 shape (`mint2022.spec.ts`) | 3 passing |
 | mainnet fork (`fork.spec.ts`) | 4 passing, on the real mints — **on a fresh `./fork/setup.sh`**, see the singleton note above |
-| `cargo mutants` on `lib.rs` | 16 mutants, 16 caught — ⚠️ **measured BEFORE the deposit cap landed; `lib.rs` has grown since and this row needs a re-run** |
+| `cargo mutants` on `lib.rs` | 18 mutants, 18 caught, 0 missed — re-run 2026-09-20 02:39–02:55, now that `lib.rs` carries `enforce_caps` and `set_deposit_cap`. The two new mutants are exactly those two functions, both caught. ⚠️ **and the score does not mean what it looks like — see below** |
 | `cargo mutants` on `math.rs` | 32 mutants, 30 caught, 2 unviable, 0 missed |
 | frontend (`cd app && npm run check`) | adapter, ratio maths and page-honesty assertions |
+
+⛔ **18/18 ON `lib.rs` CERTIFIES THE INSTRUMENT, NOT THE POPULATION.** The cap's
+whole decision is `require!(next_held[i] <= deposit_cap, …)`, and cargo-mutants
+does not mutate inside macro expansions — so it never generated `<= → <` and the
+perfect score was measured over a set that excludes the one comparison the cap
+is. Verified by hand on 2026-09-20: flip that operator, rebuild, redeploy, and
+the suite goes **16 passing / 1 failing** with only *"a deposit landing EXACTLY
+on the cap is accepted"* failing. The other three cap tests all still pass — the
+boundary had no coverage at all before that test existed, and the mutation score
+said the opposite. (Restored `.so` is byte-identical, md5 `8e3c0647…`.)
 
 ⚠️ `cargo mutants` on `math.rs` needs `-- --lib`, or every mutant drags the
 TypeScript bridge through build + deploy + suite and 2 minutes becomes 5 hours.

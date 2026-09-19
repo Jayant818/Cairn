@@ -1,4 +1,4 @@
-import { perShare, fromBase, type Meta, type Step } from "../lib/source";
+import { perShare, type Meta, type Step } from "../lib/source";
 
 const shortSig = (s: string) => `${s.slice(0, 6)}…${s.slice(-6)}`;
 
@@ -12,10 +12,6 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
     <section className="card" style={{ padding: 24, marginBottom: 24 }}>
       <div className="eyebrow">Receipts</div>
       <h2 className="display display-md" style={{ marginTop: 12 }}>Every transaction in the recording</h2>
-      <p className="caption" style={{ marginTop: 6, maxWidth: 640 }}>
-        Newest first. The signature is the whole point — the arithmetic above is checkable
-        against these, not something you have to believe.
-      </p>
       <div style={{ marginTop: 16, borderTop: "1px solid var(--hairline)" }}>
         {rows.map((s) => {
           const mask = s.sleeveMask;
@@ -35,7 +31,7 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
                   className="mono"
                   style={{
                     fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em",
-                    color: s.kind === "redeem" ? "var(--cobalt)" : "var(--accent)",
+                    color: s.kind === "redeem" ? "var(--cobalt)" : "var(--text-3)",
                   }}
                 >
                   {s.kind}
@@ -53,10 +49,7 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
                     className="caption"
                     style={{ color: "var(--orange)", marginTop: 4, fontWeight: 500 }}
                   >
-                    Took the cash leg only — and still burned{" "}
-                    <span className="mono">{fromBase(s.sharesBurned ?? "0", 0)}</span> shares in
-                    full. The stock leg those shares entitled them to stayed in the vault, which
-                    is why {meta.sleeves[0].symbol} per share jumps on this row.
+                    Cash leg only — shares burned in full.
                   </div>
                 )}
               </div>
@@ -85,10 +78,6 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
           );
         })}
       </div>
-      <p className="micro" style={{ marginTop: 12 }}>
-        Signatures are from the recorded fork, so they resolve against that validator rather
-        than against mainnet. They are listed in full in the fixture shipped with this page.
-      </p>
     </section>
   );
 }

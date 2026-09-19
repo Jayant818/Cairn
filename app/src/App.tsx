@@ -1,106 +1,118 @@
-import { recordedSource, plottable, type VaultSource } from "./lib/source";
-import { HeroFold } from "./components/Hero";
-import { Provenance } from "./components/Provenance";
-import { RatchetCharts, StockLegChart } from "./components/Series";
+import { recordedSource, type VaultSource } from "./lib/source";
+import { Staircase } from "./components/Staircase";
 import { Feed } from "./components/Feed";
-import { Disclosure } from "./components/Disclosure";
 
-// ⛔ THE ONLY PLACE A SOURCE IS CHOSEN. No component imports the fixture; swapping this
-// line for a live-RPC implementation is the whole of the migration. The restyle did not
-// dissolve that boundary and must not.
+// ⛔ THE ONLY PLACE A SOURCE IS CHOSEN. No component imports the fixture.
 const source: VaultSource = recordedSource;
 
-// The artifact that actually exists on a public cluster: the program and its IDL.
-// ⛔ NOT a vault — there is no vault account on devnet, and devnet has no real SPYx or
-// USDY, so one could only ever hold model mints. Do not write "vault" about anything on a
-// public cluster until a vault account exists there.
+// The artifact that exists on a public cluster: the program. ⛔ NOT a vault — no vault
+// account exists there, and devnet has no real SPYx or USDY.
 const EXPLORER =
   "https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet";
 
 export default function App() {
   const meta = source.meta();
   const steps = source.steps();
-  const series = plottable(steps);
 
   return (
-    <div className="wrap">
-      <HeroFold meta={meta} steps={steps} explorerUrl={EXPLORER} />
-
-      <Provenance source={source} />
-
-      {/* Feature STACK, in the order his complaint demands: what it is, how it works, what
-          it costs you, what can go wrong — THEN the evidence. The old page ran the evidence
-          first and never answered the earlier questions. */}
-      <section className="band">
-        <div className="eyebrow">How the ratchet works</div>
-        <h2 className="display display-md" style={{ marginTop: 12 }}>The fee stays in the pool</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
-                      gap: 28, marginTop: 24 }}>
-          <div>
-            <div style={{ color: "var(--text)", fontWeight: 500 }}>Deposit both legs</div>
-            <p className="caption" style={{ marginTop: 6 }}>
-              You put in {meta.sleeves.map((s) => s.symbol).join(" and ")} together and receive
-              shares. You are credited the smaller of the two ratios, so a lopsided deposit
-              cannot mint more shares than the assets justify.
-            </p>
-          </div>
-          <div>
-            <div style={{ color: "var(--text)", fontWeight: 500 }}>
-              The fee is not routed anywhere
-            </div>
-            <p className="caption" style={{ marginTop: 6 }}>
-              {meta.feeBps} basis points stay in the pool. That is the entire mechanism: the
-              count behind every existing share goes up, including yours.
-            </p>
-          </div>
-          <div>
-            <div style={{ color: "var(--text)", fontWeight: 500 }}>Nothing can lower it</div>
-            <p className="caption" style={{ marginTop: 6 }}>
-              Redemption burns shares against the assets it takes, so the ratio holds. There
-              is no price in the program and no oracle in the money path.
-            </p>
+    <>
+      {/* 1. STRIP — the recorded-run label lives here, once. */}
+      {source.recorded && (
+        <div className="strip">
+          <div className="container">
+            Recorded run, fork of mainnet.
           </div>
         </div>
-      </section>
+      )}
 
-      {/* PROMOTED above the charts: this is what it costs a user, and it was buried. */}
-      <section className="band">
-        <div className="eyebrow" style={{ color: "var(--orange)" }}>Before you redeem</div>
-        <h2 className="display display-md" style={{ marginTop: 12 }}>
-          Taking one leg burns your shares in full
-        </h2>
-        <p className="lede" style={{ marginTop: 16 }}>
-          You can redeem both legs, or either one alone — you might want out of the stock and
-          not the cash, or the issuer might have frozen one of them.
-        </p>
-        <p className="lede" style={{ marginTop: 12, color: "var(--orange)" }}>
-          It is not a discount and not a partial exit. The assets you leave behind stay in the
-          pool and raise everyone else&apos;s count. The recording below contains a real
-          example on its last row.
-        </p>
-      </section>
+      {/* 2. NAV */}
+      <div className="container">
+        <nav className="nav">
+          <span style={{ fontFamily: "var(--font-display)", fontVariationSettings: "'wdth' 120,'wght' 700",
+                         textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--text)" }}>
+            StockPump
+          </span>
+          <a className="small" href={EXPLORER} target="_blank" rel="noreferrer">
+            Program on Solana Explorer →
+          </a>
+        </nav>
+      </div>
 
-      <Disclosure meta={meta} />
+      {/* 3. HERO 50/50 — copy left, the staircase right at true scale. */}
+      <div className="container">
+        <div className="hero">
+          <div className="fold-glow" />
+          <div style={{ position: "relative" }}>
+            <h1>
+              A pot of tokenized S&amp;P 500 and dollars where everyone who comes in or goes
+              out leaves 1% behind — so the stock behind your share only ever goes up.
+            </h1>
+            <p className="lead" style={{ marginTop: 22 }}>
+              You already hold tokenized stock. Deposit it, take a share, and own more stock
+              every time anyone else trades.
+            </p>
+            <a className="cta" style={{ marginTop: 26 }} href={EXPLORER}
+               target="_blank" rel="noreferrer">
+              View the program on Solana Explorer
+            </a>
+          </div>
+          <Staircase meta={meta} steps={steps} />
+        </div>
+      </div>
 
-      <section className="band">
-        <div className="eyebrow">Evidence</div>
-        <h2 className="display display-md" style={{ marginTop: 12 }}>
-          Every number here came off a chain
-        </h2>
-        <p className="lede" style={{ marginTop: 14 }}>
-          One recorded run against a fork of mainnet, carrying the real SPYx and USDY mints.
-          Nine transactions, each listed with its signature.
-        </p>
-      </section>
+      {/* 4 + 5. WHAT THIS IS, then three cards. This is where the deleted prose went. */}
+      <div className="container">
+        <section className="band">
+          <h2>One pot, two assets, a fee nobody collects.</h2>
+          <div className="cards" style={{ marginTop: 32 }}>
+            <div className="card">
+              <h3>The fee stays in</h3>
+              <p className="small" style={{ marginTop: 10 }}>
+                {meta.feeBps} bps in and out, to the pot.
+              </p>
+            </div>
+            <div className="card">
+              <h3>The count only rises</h3>
+              <p className="small" style={{ marginTop: 10 }}>
+                Nothing can lower what backs a share.
+              </p>
+            </div>
+            <div className="card">
+              <h3>Redeem pays in kind</h3>
+              <p className="small" style={{ marginTop: 10 }}>
+                One leg? Shares still burn in full.
+              </p>
+            </div>
+          </div>
+          {/* ⛔ The StockLegChart is gone: it plotted total SPYx held, which falls on
+              withdrawals and needed three sentences of defence. IF A CHART REQUIRES A
+              DEFENCE, THE CHART LOST. Its disclosure survives as this one cobalt line. */}
+          <p style={{ marginTop: 28, color: "var(--cobalt)" }}>
+            Your share of the stock only grows. Its dollar value still falls when the S&amp;P
+            falls, equally for everyone.
+          </p>
+        </section>
 
-      <RatchetCharts meta={meta} steps={series} />
-      <StockLegChart meta={meta} steps={series} />
-      <Feed meta={meta} steps={steps} />
+        {/* 6. THE FEED */}
+        <Feed meta={meta} steps={steps} />
 
-      <footer className="caption" style={{ marginTop: 40, borderTop: "1px solid var(--hairline)", paddingTop: 20 }}>
-        <div>program <span className="mono">{meta.programId}</span> · fee {meta.feeBps} bps</div>
-        <div style={{ marginTop: 4 }}>share mint <span className="mono">{meta.shareMint}</span></div>
-      </footer>
-    </div>
+        {/* 7. ISSUER RISK — orange, once, one sentence. */}
+        <section className="band band-tight">
+          <p style={{ color: "var(--orange)" }}>
+            {meta.sleeves[0].symbol}&apos;s issuer can freeze or seize it — one key does
+            both.
+          </p>
+        </section>
+
+        {/* 8. FOOTER */}
+        <footer className="band band-tight small mono" style={{ color: "var(--text-3)" }}>
+          <div>program {meta.programId}</div>
+          <div>share mint {meta.shareMint}</div>
+          <div>
+            {meta.sleeves.map((s) => `${s.symbol} ${s.mint}`).join(" · ")}
+          </div>
+        </footer>
+      </div>
+    </>
   );
 }

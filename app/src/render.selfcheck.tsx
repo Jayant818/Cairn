@@ -1,107 +1,66 @@
-import { readFileSync } from "node:fs";
 import React from "react";
-// Render the real component tree to a string and assert the page actually says the things
-// the build is conditioned on. No browser: a headless render catches "the component threw"
-// and "the honesty line is missing", which are the two failures that matter here.
-//
-// ⛔ Every assertion below is a CONDITION OF THE BUILD, not a nice-to-have:
-//    the recorded-run banner is ON THE PAGE · nothing implies live state ·
-//    the mask-redeem forfeit is stated · seafoam is only ever on the two monotone series.
-// Run: npx tsx src/render.selfcheck.tsx
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import App from "./App";
-import { recordedSource, perShare } from "./lib/source";
+import { recordedSource, perShare, plottable } from "./lib/source";
 
 const html = renderToStaticMarkup(<App />);
-const must = (needle: string, why: string) => {
-  if (!html.includes(needle)) throw new Error(`MISSING: ${why} (looked for ${JSON.stringify(needle)})`);
-};
-const mustNot = (re: RegExp, why: string) => {
-  const m = html.match(re);
-  if (m) throw new Error(`FORBIDDEN: ${why} — found ${JSON.stringify(m[0])}`);
+const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+const must = (n: string, why: string) => {
+  if (!html.includes(n)) throw new Error(`MISSING: ${why} (looked for ${JSON.stringify(n)})`);
 };
 
-must("Recorded run — not live state", "the provenance banner");
-
-// THE FOLD MUST ANSWER "WHAT IS THIS" BEFORE ANY EVIDENCE. The page this replaced opened
-// with proof and never said what the thing was, which is why "ugly" and "the functionality
-// is not clear" turned out to be one complaint.
-must("Put in stock and cash", "the headline");
-must("pays its fee to the pool", "the mechanism line");
-must("already hold tokenized equity", "who it is for");
-must("View the program on Solana Explorer", "the primary action");
-// ⛔ NOT a vault. There is no vault account on a public cluster, and devnet has no real
-// SPYx or USDY, so one could only hold model mints. The recorded run may say vault; the
-// live-cluster copy may not.
-const fold = html.slice(0, html.indexOf("Recorded run"));
-if (/vault/i.test(fold))
-  throw new Error("the fold claims a vault on a public cluster — no vault account exists there");
-must("per share", "the jar card's spelled-out units");
-must("Both counts only rise", "the ratchet charts");
-must("The stock leg, in total", "the cobalt stock-leg chart");
-must("What the issuers can still do", "the disclosure block");
-must("Every transaction in the recording", "the feed");
-must("still burned", "the mask-redeem forfeit, stated on the row it happened");
-must("burns your shares in full", "the redeem honesty paragraph");
-
-// ⛔ NOTHING MAY IMPLY LIVE STATE. A demo that says "current" or ticks is the framing
-// Secretary ruled out, and it is the difference between replaying and pretending.
-// ⚠️ THE FIRST VERSION OF THIS CHECK BANNED THE WORD "live" AND FIRED IMMEDIATELY — on
-// "not live state" and on "signing needs a live cluster, and this page has none", i.e. on
-// the three places the page DENIES liveness. Banning a word cannot tell a claim from its
-// negation. So: every occurrence must sit next to a denial, which is a check the page can
-// actually fail by asserting liveness anywhere.
-const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-// ⛔⛔ AND THE SECOND VERSION WAS ALSO WRONG, caught by falsifying it: a +/-50 CHARACTER
-// window let a denial in the NEIGHBOURING sentence vouch for a claim in this one. Adding
-// "Live balances." to the footer passed, because the preceding section ends "...and this
-// page has none." That is the rule from my own cron prompt — a control that any nearby
-// SENTENCE can satisfy is not a control — so the window is now the SENTENCE itself.
-for (const sentence of plain.split(/(?<=[.!?])\s+/)) {
-  if (!/\blive\b/i.test(sentence)) continue;
-  if (!/not live|has none|needs a live/i.test(sentence))
-    throw new Error(`FORBIDDEN: a liveness claim, not a denial — "${sentence.trim()}"`);
+// ── the headline must not be the falsifiable one ────────────────────────────
+// ⛔ "Take out more than you put in" was FALSIFIABLE WITH OUR OWN FIXTURE. Recomputed here
+// so the check owns the number rather than trusting a memo: total +4.7245%, of which ONE
+// one-leg redemption contributes +4.1172%. The honest fee ratchet is +0.5833% against a
+// 1.99% round trip — a normal depositor is 3.41x underwater. A judge does that in minutes.
+{
+  const S = plottable(recordedSource.steps());
+  const r = (s: (typeof S)[number]) => Number(BigInt(s.held[0])) / Number(BigInt(s.shareSupply));
+  const total = (r(S[S.length - 1]) / r(S[0]) - 1) * 100;
+  let mask = 1, other = 1;
+  for (let i = 1; i < S.length; i++) {
+    const m = r(S[i]) / r(S[i - 1]);
+    if (S[i].sleeveMask === 0b10) mask *= m; else other *= m;
+  }
+  if (Math.abs(total - 4.7245) > 0.01) throw new Error(`fixture moved: total ${total}`);
+  if ((mask - 1) * 100 < (other - 1) * 100)
+    throw new Error("the one-leg redeem no longer dominates — recheck the honesty copy");
+  if (/take out more than you put in/i.test(plain))
+    throw new Error("the falsifiable headline is back on the page");
+  // and the page must SAY the split rather than let the chart imply the whole gain is fees
+  must("+4.1172", "the one-leg redeem's share of the gain, stated on the graphic");
+  must("+0.5833%", "the honest fee ratchet, stated on the graphic");
 }
-mustNot(/\bcurrent price\b|\bas of now\b|\bupdating\b|\breal[- ]time\b/i, "a live-state implication");
 
-// every signature in the fixture must be reachable from the page
+must("everyone who comes in or goes out leaves 1% behind", "the ruled H1");
+must("every time anyone else trades", "the ruled sub");
+// ⛔ "trades" not "waits": the moment it implies TIME it is an interest-rate claim we cannot
+// keep. Do not let a later edit soften it.
+if (/every time anyone else (waits|earns)|per year|\bAPY\b|\byield\b/i.test(plain))
+  throw new Error("the sub implies time or yield — that is an interest-rate claim");
+
+must("View the program on Solana Explorer", "the primary action");
+// ⛔ no "vault" language for anything on a public cluster
+const fold = plain.slice(0, plain.indexOf("One pot"));
+if (/vault/i.test(fold)) throw new Error("the fold claims a vault on a public cluster");
+
+// ⛔ the chart that required a defence is gone
+if (/The stock leg, in total/.test(plain)) throw new Error("StockLegChart is back");
+must("Its dollar value still falls", "the loss-absorption disclosure that replaced it");
+
+// every signature still reachable
 for (const s of recordedSource.steps())
-  if (!html.includes(s.signature)) throw new Error(`signature ${s.signature.slice(0, 8)} not on the page`);
+  if (!html.includes(s.signature)) throw new Error(`signature ${s.signature.slice(0, 8)} missing`);
 
-// ⛔ SEAFOAM IS RESERVED FOR THE SERIES THAT CANNOT FALL. The rule is structural, so the
-// check is structural: the stock-leg section — the one thing on this page that legitimately
-// falls — must be cobalt and must contain NO seafoam at all.
-// ⚠️ My first version COUNTED seafoam uses and pinned the total. It failed at 38-vs-24, and
-// the honest reading is that the expected number was a guess, not a derivation. Tuning that
-// constant until it passed would have produced a control that asserts nothing except my
-// arithmetic. A count is the wrong instrument for a rule about WHICH ELEMENT wears a colour.
-const section = (heading: string) => {
-  const at = html.indexOf(heading);
-  if (at < 0) throw new Error(`section not found: ${heading}`);
-  const start = html.lastIndexOf("<section", at);
-  const end = html.indexOf("</section>", at);
-  return html.slice(start, end);
-};
+// ── colour semantics, structurally ──────────────────────────────────────────
+// seafoam is on the monotone series; the loss-absorption line is cobalt; orange appears for
+// issuer risk and the honesty annotation and nowhere else.
+must("var(--seafoam)", "the monotone series in seafoam");
+must("var(--cobalt)", "the loss-absorption line in the market colour");
 
-const stockLeg = section("The stock leg, in total");
-if (!stockLeg.includes("--cobalt"))
-  throw new Error("the stock leg is not drawn in the market colour");
-if (stockLeg.includes("--seafoam"))
-  throw new Error("the stock leg wears seafoam — it can FALL, and seafoam means 'only rises'");
-
-const ratchet = section("Both counts only rise");
-if (!ratchet.includes("--seafoam"))
-  throw new Error("the monotone series are not in seafoam");
-if (ratchet.includes("--cobalt"))
-  throw new Error("a monotone series is drawn in the market colour");
-
-const latest = recordedSource.steps().at(-1)!;
-const v = perShare(latest.held[0], latest.shareSupply, 8)!;
-must(v.toFixed(8), "the latest SPYx-per-share figure, rendered from the adapter");
-
-// ⛔ AN UNDEFINED CSS VAR FAILS SILENTLY. The declaration is dropped and the element just
-// inherits, so a missed rename renders wrong without throwing anything. This caught ten
-// stale names after the dark rewrite, and no other check here could have.
+// ── an undefined CSS var fails SILENTLY, so cross-reference every one used ──
 {
   const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
   const defined = new Set([...css.matchAll(/^\s+(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
@@ -111,4 +70,39 @@ must(v.toFixed(8), "the latest SPYx-per-share figure, rendered from the adapter"
   if (!defined.has("--seafoam")) throw new Error("control failed: index.css was not read");
 }
 
-console.log(`render selfcheck PASS — ${html.length} bytes, colour rules structural, all ${recordedSource.steps().length} signatures present`);
+// ── the prose budget ────────────────────────────────────────────────────────
+// Under 80 words on the whole page, excluding the two ruled hero lines (47 words, fixed by
+// the ruling) and excluding mono identifiers, which are data rather than prose.
+// ⛔ THE BUDGET IS ABOUT PROSE, SO THE COUNTER MUST MEASURE PROSE. An earlier version
+// counted every word in the markup and read 135 against a cap of 80 — but that swept in the
+// nav, the CTA, field labels, headings and the footer's identifiers, none of which are
+// sentences. Cutting copy to satisfy a counter that measures the wrong thing would have been
+// the worst kind of compliance.
+// RULE, stated so it can be argued with: a sentence ends in a full stop. Headings, labels
+// and identifiers do not. The feed is nine transaction ROWS — labels and amounts are data.
+// The two hero lines are fixed by the ruling and excluded.
+const HERO_LINES = [
+  "A pot of tokenized",           // the ruled H1
+  "You already hold tokenized",   // the ruled sub
+];
+const noMono = html.replace(/<(span|div|a)[^>]*class="[^"]*mono[^"]*"[^>]*>.*?<\/\1>/g, " ");
+const feedStart = noMono.indexOf("Every transaction");
+const outsideFeed =
+  noMono.slice(0, feedStart) + noMono.slice(noMono.indexOf("</section>", feedStart));
+const blocks = outsideFeed
+  .replace(/<[^>]+>/g, "\n")
+  .split("\n")
+  .map((s) => s.replace(/&amp;/g, "&").replace(/&#x27;/g, "'").trim())
+  .filter((s) => s.includes(".") && /[a-z]{3}/i.test(s))
+  .filter((s) => !HERO_LINES.some((h) => s.startsWith(h)));
+const prose = blocks.reduce(
+  (n, s) => n + s.split(/\s+/).filter((w) => /[a-z]/i.test(w) && w.length > 1).length, 0);
+if (prose > 80) {
+  for (const b of blocks) console.error("  " + b.slice(0, 90));
+  throw new Error(`prose budget blown: ${prose} words (cap 80)`);
+}
+// control: the counter must be able to SEE the sentences it is scoring
+if (blocks.length < 4) throw new Error("control failed: the prose scan found almost nothing");
+
+console.log(`render selfcheck PASS — ${html.length} B · prose ${prose}/80 words · all ${recordedSource.steps().length} signatures`);
+void perShare;

@@ -55,7 +55,8 @@ function Line({
 export function RatchetCharts({ meta, steps }: { meta: Meta; steps: Step[] }) {
   return (
     <section className="card" style={{ padding: 24, marginBottom: 24 }}>
-      <h2 style={{ fontSize: 20 }}>Both counts only rise</h2>
+      <div className="eyebrow">The ratchet</div>
+      <h2 className="display display-md" style={{ marginTop: 12 }}>Both counts only rise</h2>
       <p className="caption" style={{ marginTop: 6, maxWidth: 640 }}>
         One point per transaction in the recording. Deposits raise the count behind each share;
         redemptions burn shares against the assets they take, so the ratio never falls.
@@ -93,7 +94,8 @@ export function StockLegChart({ meta, steps }: { meta: Meta; steps: Step[] }) {
   }));
   return (
     <section className="card" style={{ padding: 24, marginBottom: 24 }}>
-      <h2 style={{ fontSize: 20 }}>The stock leg, in total</h2>
+      <div className="eyebrow">Position</div>
+      <h2 className="display display-md" style={{ marginTop: 12 }}>The stock leg, in total</h2>
       <p className="caption" style={{ marginTop: 6, maxWidth: 640 }}>
         How much {s.symbol} the vault holds altogether. This one moves in both directions —
         a redemption takes {s.symbol} out — so it is drawn as one steady line in a market

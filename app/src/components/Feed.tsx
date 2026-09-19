@@ -10,7 +10,8 @@ export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
   const rows = [...steps].reverse();
   return (
     <section className="card" style={{ padding: 24, marginBottom: 24 }}>
-      <h2 style={{ fontSize: 20 }}>Every transaction in the recording</h2>
+      <div className="eyebrow">Receipts</div>
+      <h2 className="display display-md" style={{ marginTop: 12 }}>Every transaction in the recording</h2>
       <p className="caption" style={{ marginTop: 6, maxWidth: 640 }}>
         Newest first. The signature is the whole point — the arithmetic above is checkable
         against these, not something you have to believe.

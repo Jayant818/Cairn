@@ -15,9 +15,10 @@ export function Disclosure({ meta }: { meta: Meta }) {
         background: "color-mix(in srgb, var(--orange-wash) 14%, var(--surface))",
       }}
     >
-      <div style={{ color: "var(--orange)", fontWeight: 600, fontSize: 14 }}>
+      <div className="eyebrow" style={{ color: "var(--orange)" }}>Counterparty</div>
+      <h2 className="display display-md" style={{ marginTop: 12 }}>
         What the issuers can still do to your assets
-      </div>
+      </h2>
       <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "var(--text-2)", fontSize: 14 }}>
         <li>
           {stock.symbol} carries a <strong>permanent delegate</strong> and a{" "}

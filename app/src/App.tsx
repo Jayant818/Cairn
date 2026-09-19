@@ -87,8 +87,7 @@ export default function App() {
               withdrawals and needed three sentences of defence. IF A CHART REQUIRES A
               DEFENCE, THE CHART LOST. Its disclosure survives as this one cobalt line. */}
           <p className="disclosure">
-            Your share of the stock only grows. Its dollar value still falls when the S&amp;P
-            falls, equally for everyone.
+            Your share of the stock only grows. Its dollar value still falls with the S&amp;P.
           </p>
         </div>
       </section>
@@ -100,10 +99,17 @@ export default function App() {
         </div>
       </section>
 
-      {/* 7. ISSUER RISK — orange, once, one sentence. */}
+      {/* 7. ISSUER RISK — orange, once.
+          ⛔ THE PREVIOUS WORDING WAS FALSE AND WAS LIVE ON THE PUBLIC PAGE. It said "one key
+          does both". Measured at the mint: seize is the permanent delegate 5aMNNLQJ…, freeze
+          is a SEPARATE freezeAuthority JDq14BWv…, and that second key also holds
+          pausableConfig. Two keys, three powers. ⭐ The correction is strictly WORSE for the
+          issuer than the false version — three powers where the page claimed two, plus a
+          global pause we had never mentioned — so it cannot be read as a softening. */}
       <section className="sec sec-risk">
         <div className="container risk">
-          {meta.sleeves[0].symbol}&apos;s issuer can freeze or seize it — one key does both.
+          Backed can seize {meta.sleeves[0].symbol} with a permanent delegate, and freeze or
+          pause it with a second key.
         </div>
       </section>
 

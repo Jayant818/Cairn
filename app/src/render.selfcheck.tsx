@@ -75,6 +75,18 @@ must("var(--cobalt)", "the loss-absorption line in the market colour");
                     `animation must be an enhancement, never the only path to visible`);
 }
 
+// ── the product is CAIRN ────────────────────────────────────────────────────
+// ⛔ The old name must not survive anywhere a reader can see it. The PROGRAM keeps its
+// identity — crate, program id, on-chain accounts, file paths under programs/ — because it
+// is deployed at 5RaETrSZ… and a rename that reaches it is a redeploy. This checks the
+// RENDERED MARKUP only, which is exactly the boundary between the two.
+{
+  if (/stockpump/i.test(html))
+    throw new Error("the old product name is still in the rendered page");
+  if (!/Cairn/.test(html))
+    throw new Error("control failed: the wordmark is not in the page at all");
+}
+
 // ── the headline figure must be the REAL final value ────────────────────────
 // ⛔ IT READ 0.00000000 AND THE CAUSE WAS NOT THE RESTING STATE — `perShare` already divides
 // by 10**decimals and the render divided AGAIN, so the figure was wrong at EVERY frame,

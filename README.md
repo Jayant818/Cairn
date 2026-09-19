@@ -1,4 +1,4 @@
-# StockPump
+# Cairn
 
 A Solana vault holding tokenized S&P 500 (**SPYx**) and tokenized dollars
 (**USDY**) together, where the quantity of each asset standing behind one share

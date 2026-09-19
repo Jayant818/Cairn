@@ -30,7 +30,7 @@ export default function App() {
         <nav className="nav">
           <span style={{ fontFamily: "var(--font-display)", fontVariationSettings: "'wdth' 120,'wght' 700",
                          textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--text)" }}>
-            StockPump
+            Cairn
           </span>
           <a className="small" href={EXPLORER} target="_blank" rel="noreferrer">
             Program on Solana Explorer →

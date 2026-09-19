@@ -62,7 +62,7 @@ export function Staircase({ meta, steps }: { meta: Meta; steps: Step[] }) {
         {meta.sleeves[0].symbol} behind one share
       </div>
       <div className="mono" style={{ fontSize: 40, color: "var(--seafoam)", lineHeight: 1.05 }}>
-        {(now / 10 ** dp).toFixed(dp)}
+        {now.toFixed(dp)}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img"
            aria-label={`${meta.sleeves[0].symbol} per share across ${ys.length} recorded transactions`}>
@@ -70,13 +70,13 @@ export function Staircase({ meta, steps }: { meta: Meta; steps: Step[] }) {
               strokeLinejoin="miter" pathLength={1}
               style={{ strokeDasharray: 1, strokeDashoffset: 1 - t }} />
         {series.map((s, i) => {
-          if (i === 0 || i >= shown) return null;
+          const isFirst = i === 1, isLast = i === ys.length - 1;
+          if (i === 0 || i >= shown || !(isFirst || isLast)) return null;
           const key = s.kind === "redeem" ? `redeem-${s.sleeveMask}` : s.kind;
-          const last = i === ys.length - 1;
           return (
             <g key={s.signature} style={{ opacity: 0.9 }}>
               <circle cx={x(i)} cy={y(ys[i])} r="3" fill="var(--seafoam)" />
-              <text x={x(i)} y={y(ys[i]) - 10} textAnchor={last ? "end" : "middle"}
+              <text x={x(i)} y={y(ys[i]) - 10} textAnchor={isLast ? "end" : "start"}
                     fontSize="10" fill="var(--text-3)"
                     fontFamily="var(--font-sans)">
                 {LABELS[key] ?? s.kind}

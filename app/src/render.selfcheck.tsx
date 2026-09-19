@@ -75,6 +75,29 @@ must("var(--cobalt)", "the loss-absorption line in the market colour");
                     `animation must be an enhancement, never the only path to visible`);
 }
 
+// ── the headline figure must be the REAL final value ────────────────────────
+// ⛔ IT READ 0.00000000 AND THE CAUSE WAS NOT THE RESTING STATE — `perShare` already divides
+// by 10**decimals and the render divided AGAIN, so the figure was wrong at EVERY frame,
+// animated or not. It rendered, it was the right shape, it was in the DOM, and every
+// existing assertion passed. ⭐ A VALUE CAN BE PRESENT AND WRONG; "it renders" is not a test.
+{
+  const S = plottable(recordedSource.steps());
+  const last = S[S.length - 1];
+  const dp = recordedSource.meta().sleeves[0].decimals;
+  const want = perShare(last.held[0], last.shareSupply, dp)!.toFixed(dp);
+  if (!html.includes(`>${want}<`))
+    throw new Error(`the hero figure is not the final per-share value (${want})`);
+  if (/>0\.0{8}</.test(html))
+    throw new Error("the hero figure renders as zero");
+}
+
+// ── tread labels must not repeat into mush ──────────────────────────────────
+// ⛔ Six identical "someone deposited" labels overlapped along the axis. First and last only.
+{
+  const n = (html.match(/someone deposited/g) ?? []).length;
+  if (n > 1) throw new Error(`${n} identical tread labels — they overlap into mush`);
+}
+
 // ── orange is spent ONCE, and only on issuer risk ───────────────────────────
 // ⛔ It was spent FOUR times: the feed, two places in the staircase, and the risk box.
 // Colouring the last-riser annotation orange says "danger" about the product's best moment

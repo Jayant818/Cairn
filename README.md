@@ -1,15 +1,55 @@
 # Cairn
 
-A Solana vault holding tokenized S&P 500 (**SPYx**) and tokenized dollars
-(**USDY**) together, where the quantity of each asset standing behind one share
-only ever goes up.
+**Stake the stocks you already hold.** Put tokenized S&P 500 into a pot, get **pSPY** back,
+and the amount of stock standing behind your pSPY goes up every time anybody else trades.
 
-Every deposit pays a fee to the vault itself rather than to a treasury, so the
-count behind each existing share ratchets. **There is no price in the program
-and no oracle in the money path.** The claim is a count, and a count is
-checkable — which is the only reason to believe it.
+[**Live page**](https://stockpump-one.vercel.app) ·
+[**Program on Solana Explorer**](https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet) ·
+[nine recorded transactions](#the-numbers-including-the-one-that-flatters-us)
 
 ---
+
+## Why this exists
+
+Tokenized equity on Solana is real now — Backed lists twenty xStocks, and SPYx and USDY are
+live mainnet mints today. But holding a tokenized stock does nothing that holding the stock
+does not. There is no on-chain reason to prefer the tokenized version.
+
+Cairn gives it one. **Every deposit and every redemption leaves 1% in the pot, and there is
+no treasury address to sweep it out to**, so it lands on the shares already there. The
+number of shares behind your receipt token only goes up. It cannot go down, because no code
+path lowers it.
+
+⇒ Structurally this is a **liquid staking token whose underlying is stock**. You hold mSOL
+and the SOL behind it rises; you hold pSPY and the SPYx behind it rises. The difference is
+where the yield comes from: an LST pays from validator rewards, which accrue with **time**.
+**Cairn pays from other people's trades, which accrue with flow.** A quiet week pays nothing,
+and the README says so because the page does.
+
+## What it offers
+
+| | |
+|---|---|
+| **One pot per stock** | Each pot pairs one tokenized stock with dollars and mints its own receipt token — SPYx → **pSPY**, a Tesla pot would mint **pTSLA**. Pots ratchet independently. |
+| **In-kind, always** | Deposit and redeem move the real assets. No oracle, no price, no swap in the money path. |
+| **A count, not a price** | The claim is *how many* SPYx sit behind one pSPY. A count is checkable on chain by anyone; a price is a thing you have to trust somebody about. |
+| **A deposit cap** | Per-pot, per-sleeve, authority-settable, and it **never blocks redeem**. Bounds what a bug can cost while the program is young. |
+
+## The numbers, including the one that flatters us
+
+From the nine recorded transactions in `app/src/data/fork-run.json`, against the real mints:
+
+| | |
+|---|---|
+| **+4.7245%** | total rise in SPYx-per-share across the whole run |
+| **+4.1172%** | …of which **one person** redeemed only their cash leg and abandoned their stock. **That is not the product.** |
+| **+0.5833%** | the fee ratchet on its own — the number the mechanism actually produced |
+| **−1.99%** | what a round trip costs you, 1% in and 1% out |
+
+⇒ **At the volume in that recording, roughly twenty other people have to trade before a
+depositor is back to even.** This is a claim on other people's flow, not on time passing.
+Every protocol prints the first number. The reason to trust the rest of this repository is
+that we printed the third one next to it.
 
 ## What is real here, and what is not
 
@@ -40,7 +80,7 @@ anchor deploy --provider.cluster http://127.0.0.1:8899
 
 # 3. the tests
 ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 ANCHOR_WALLET=~/.config/solana/id.json \
-  npx ts-mocha -p ./tsconfig.json -t 1000000 tests/stockpump.spec.ts   # 12 local
+  npx ts-mocha -p ./tsconfig.json -t 1000000 tests/stockpump.spec.ts   # 16 local
 ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 ANCHOR_WALLET=~/.config/solana/id.json \
   npx ts-mocha -p ./tsconfig.json -t 1000000 tests/fork.spec.ts        # 4 on the real mints
 
@@ -99,13 +139,23 @@ Not fine print. Measured at the mints on 2026-09-18:
   `newMultiplier`, not `multiplier` — reading the wrong field understates SPYx
   by 0.1799%. **The vault accounts in raw base units and reads neither.**
 
+## Status, stated plainly
+
+| | |
+|---|---|
+| **Program** | Deployed and byte-verified on **devnet** at `5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY`. **Never deployed to mainnet. Has never held real money.** |
+| **Audit** | **None.** Mutation testing is not an audit — see *The defect worth reading about* below for a measured case where a clean mutation score coexisted with a broken program for four commits. |
+| **The demo** | A **recorded** run replayed from a fixture. Every signature is listed. The page says so at the top rather than in a footnote. |
+| **Untested class** | **Issuance, freeze, pause.** Backed holds SPYx's mint authority, so no test wallet can be issued the token — the fork writes balances at genesis. Those paths are modelled, never executed, and that is the failure class most likely to matter on mainnet. |
+
 ## Testing
 
 | suite | result |
 |---|---|
-| local (`stockpump.spec.ts`) | 12 passing |
+| local (`stockpump.spec.ts`) | 16 passing |
+| Token-2022 shape (`mint2022.spec.ts`) | 3 passing |
 | mainnet fork (`fork.spec.ts`) | 4 passing, on the real mints — **on a fresh `./fork/setup.sh`**, see the singleton note above |
-| `cargo mutants` on `lib.rs` | 16 mutants, 16 caught |
+| `cargo mutants` on `lib.rs` | 16 mutants, 16 caught — ⚠️ **measured BEFORE the deposit cap landed; `lib.rs` has grown since and this row needs a re-run** |
 | `cargo mutants` on `math.rs` | 32 mutants, 30 caught, 2 unviable, 0 missed |
 | frontend (`cd app && npm run check`) | adapter, ratio maths and page-honesty assertions |
 
@@ -127,7 +177,9 @@ The tests were wrong in the same way the code was wrong, so they agreed, and
 ## Layout
 
 ```
-programs/stockpump/src/     the program: lib.rs, math.rs
+programs/stockpump/src/     the program: lib.rs, math.rs   (crate still named stockpump;
+                            the product was renamed to Cairn, the crate has not been —
+                            renaming it changes the program id, so it waits for mainnet)
 programs/stockpump/tests/   integration.rs — bridges cargo-mutants to the TS suite
 tests/                      stockpump.spec.ts (local), fork.spec.ts (real mints)
 fork/                       setup.sh — clones the mainnet mints, seeds holdings

@@ -18,13 +18,20 @@ declare_id!("5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY");
 pub mod stockpump {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, fee_bps: u16) -> Result<()> {
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        fee_bps: u16,
+        deposit_caps: [u64; N_SLEEVES],
+    ) -> Result<()> {
         // The product claim IS the fee. At fee_bps = 0 both ratio gains are exactly 1.0, so
         // held-per-share stops rising while every line of code still runs and every test that
         // checks "does not fall" still passes. This is the only require! the design needs, and
         // it guards a PARAMETER rather than a state transition — it cannot walk into a wall.
         require!(fee_bps > 0, StockPumpError::ZeroFee);
         require!((fee_bps as u128) < math::BPS_DENOM, StockPumpError::FeeTooLarge);
+        // 0 would mean "no deposit can ever succeed", which is a stuck vault wearing the
+        // costume of a safety limit. Uncapped is spelled u64::MAX and says what it means.
+        require!(deposit_caps.iter().all(|c| *c > 0), StockPumpError::ZeroDepositCap);
         reject_closable_mint(&ctx.accounts.sleeve0_mint)?;
         reject_closable_mint(&ctx.accounts.sleeve1_mint)?;
 
@@ -33,8 +40,8 @@ pub mod stockpump {
         v.share_mint = ctx.accounts.share_mint.key();
         v.fee_bps = fee_bps;
         v.sleeves = [
-            Sleeve { mint: ctx.accounts.sleeve0_mint.key(), held: 0 },
-            Sleeve { mint: ctx.accounts.sleeve1_mint.key(), held: 0 },
+            Sleeve { mint: ctx.accounts.sleeve0_mint.key(), deposit_cap: deposit_caps[0], held: 0 },
+            Sleeve { mint: ctx.accounts.sleeve1_mint.key(), deposit_cap: deposit_caps[1], held: 0 },
         ];
         v.bootstrapped = false;
         v.bump = ctx.bumps.vault;
@@ -57,6 +64,7 @@ pub mod stockpump {
         require!(r0 > 0 && r1 > 0, StockPumpError::EmptySleeve);
 
         let v = &mut ctx.accounts.vault;
+        enforce_caps(v, &[r0, r1])?;
         v.sleeves[0].held = r0;
         v.sleeves[1].held = r1;
         v.bootstrapped = true;
@@ -106,8 +114,13 @@ pub mod stockpump {
         let shares = shares_for_deposit(supply, &held, &[n0, n1])?;
 
         let v = &mut ctx.accounts.vault;
-        v.sleeves[0].held = v.sleeves[0].held.checked_add(r0).ok_or(StockPumpError::MathOverflow)?;
-        v.sleeves[1].held = v.sleeves[1].held.checked_add(r1).ok_or(StockPumpError::MathOverflow)?;
+        let next = [
+            v.sleeves[0].held.checked_add(r0).ok_or(StockPumpError::MathOverflow)?,
+            v.sleeves[1].held.checked_add(r1).ok_or(StockPumpError::MathOverflow)?,
+        ];
+        enforce_caps(v, &next)?;
+        v.sleeves[0].held = next[0];
+        v.sleeves[1].held = next[1];
 
         let bump = v.bump;
         let sleeve0 = ctx.accounts.sleeve0_mint.key();
@@ -188,6 +201,33 @@ pub mod stockpump {
         emit!(Reconciled { idx, new_held: actual });
         Ok(())
     }
+
+    /// Raise or lower a sleeve's deposit cap.
+    ///
+    /// ⚠️ THIS IS AN AUTHORITY POWER WE HOLD, AND IT GOES ON THE PAGE. We spent 2026-09-19
+    /// establishing that SPYx's issuer has five powers across four keys; the same standard
+    /// applies to us or it is not a standard.
+    /// ⛔ AND THE DISCLOSURE MUST NOT OVERSTATE WHAT THE CAP BUYS: `vault.authority` is
+    /// whoever signed `initialize`, which today is the same key that holds the program's
+    /// upgrade authority. One compromised key therefore both raises the cap and redeploys
+    /// the program. ⇒ THE CAP BOUNDS ACCIDENT, NOT COMPROMISE. That is still worth having —
+    /// most blast-radius events are bugs, not key theft — but it is not a security control
+    /// against losing the key, and saying so is the difference between a disclosure and a
+    /// reassurance.
+    /// ⇒ Separating the two keys is an OPERATIONAL change, not a program change: the
+    /// program already takes `vault.authority` from the initialize signer, so separation is
+    /// possible today and simply is not used. The program does not enforce it, because
+    /// reading ProgramData to compare would couple the vault to the loader for a check the
+    /// operator can make freely.
+    pub fn set_deposit_cap(ctx: Context<SetDepositCap>, idx: u8, new_cap: u64) -> Result<()> {
+        let i = idx as usize;
+        require!(i < N_SLEEVES, StockPumpError::SleeveMismatch);
+        require!(new_cap > 0, StockPumpError::ZeroDepositCap);
+        let v = &mut ctx.accounts.vault;
+        v.sleeves[i].deposit_cap = new_cap;
+        emit!(DepositCapSet { idx, new_cap });
+        Ok(())
+    }
 }
 
 /// A mint carrying MintCloseAuthority can be closed and RECREATED AT THE SAME ADDRESS with
@@ -197,6 +237,21 @@ pub mod stockpump {
 /// ⚠️ This is necessary and NOT sufficient: it proves the mint cannot be closed FROM NOW ON.
 /// It cannot prove the mint was never already closed and reinitialised before we saw it.
 /// That question needs history, which a program cannot read.
+/// ⛔ CHECKED AGAINST THE MEASURED `held`, NEVER THE REQUESTED AMOUNT. A fee-on-transfer
+/// mint makes those two differ, and the requested figure is the one the caller controls —
+/// checking it would let someone ask for 100, deliver 99, and be measured on the 100.
+/// This is the `transfer_in_measured` discipline extended to the new branch rather than
+/// bolted beside it.
+/// ⛔ AND IT IS ONLY EVER CALLED ON THE DEPOSIT PATHS. `redeem` must never consult a cap:
+/// a limit that can trap an exit is the failure it exists to prevent. Deposits are
+/// refusable; withdrawals are not.
+fn enforce_caps(v: &Vault, next_held: &[u64; N_SLEEVES]) -> Result<()> {
+    for i in 0..N_SLEEVES {
+        require!(next_held[i] <= v.sleeves[i].deposit_cap, StockPumpError::DepositCapExceeded);
+    }
+    Ok(())
+}
+
 fn reject_closable_mint(mint: &InterfaceAccount<Mint>) -> Result<()> {
     use anchor_spl::token_interface::spl_token_2022::extension::{
         BaseStateWithExtensions, StateWithExtensions, mint_close_authority::MintCloseAuthority,
@@ -276,6 +331,8 @@ pub struct Deposited { pub shares: u64, pub received: [u64; N_SLEEVES] }
 pub struct Redeemed { pub shares: u64, pub paid: Vec<u64>, pub mask: u8 }
 #[event]
 pub struct Reconciled { pub idx: u8, pub new_held: u64 }
+#[event]
+pub struct DepositCapSet { pub idx: u8, pub new_cap: u64 }
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -405,4 +462,15 @@ pub struct Reconcile<'info> {
     pub vault: Account<'info, Vault>,
     #[account(token::authority = vault)]
     pub vault_ata: InterfaceAccount<'info, TokenAccount>,
+}
+
+/// Mirrors `Reconcile`'s gating exactly — `has_one = authority` plus the seeded vault — and
+/// deliberately carries NO token accounts: changing a number in vault state must not be able
+/// to touch a balance.
+#[derive(Accounts)]
+pub struct SetDepositCap<'info> {
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [Vault::SEED, vault.sleeves[0].mint.as_ref()], bump = vault.bump,
+              has_one = authority)]
+    pub vault: Account<'info, Vault>,
 }

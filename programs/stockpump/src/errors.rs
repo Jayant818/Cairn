@@ -29,4 +29,13 @@ pub enum StockPumpError {
     MintIsClosable,
     #[msg("reconcile is downward-only — an upward mark reopens the donation vector")]
     ReconcileNotDownward,
+    // ⛔ REJECT THE WHOLE DEPOSIT, never partial-fill. A partial fill hands someone less
+    // than they asked for and mints a share count they did not compute — a surprise in the
+    // one direction users never model. It is also structurally awkward here: the transfer
+    // has ALREADY happened by the time `held` is known, so "partial" would mean a refund
+    // CPI and a new failure path. Rejecting reverts the whole transaction, which is free.
+    #[msg("deposit would push a sleeve past its cap — reduce the amount or wait")]
+    DepositCapExceeded,
+    #[msg("deposit cap must be greater than zero — use u64::MAX for uncapped")]
+    ZeroDepositCap,
 }

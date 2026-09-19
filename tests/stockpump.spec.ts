@@ -15,6 +15,8 @@ import { assert } from "chai";
 import { createTestMint, createClassicMint } from "./mint2022";
 
 const T22 = TOKEN_2022_PROGRAM_ID;
+/// u64::MAX per sleeve: the pre-cap tests are about other properties, so they run uncapped.
+const UNCAPPED = [new BN("18446744073709551615"), new BN("18446744073709551615")];
 const FEE_BPS = 100; // 1%
 
 describe("stockpump vault", () => {
@@ -103,7 +105,7 @@ describe("stockpump vault", () => {
     this.timeout(60_000);
     const bad = Keypair.generate();
     try {
-      await program.methods.initialize(0).accounts({
+      await program.methods.initialize(0, UNCAPPED).accounts({
         authority: authority.publicKey, vault, shareMint: bad.publicKey,
         sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
         tokenProgram: T22, systemProgram: SystemProgram.programId,
@@ -119,7 +121,7 @@ describe("stockpump vault", () => {
 
   it("initialize gives the SHARE MINT AUTHORITY to the vault PDA, not the deployer", async function () {
     this.timeout(60_000);
-    await program.methods.initialize(FEE_BPS).accounts({
+    await program.methods.initialize(FEE_BPS, UNCAPPED).accounts({
       authority: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
       tokenProgram: T22, systemProgram: SystemProgram.programId,
@@ -150,7 +152,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
     const [v2] = PublicKey.findProgramAddressSync(
       [Buffer.from("vault"), closable.toBuffer()], program.programId);
     try {
-      await program.methods.initialize(FEE_BPS).accounts({
+      await program.methods.initialize(FEE_BPS, UNCAPPED).accounts({
         authority: authority.publicKey, vault: v2, shareMint: sm.publicKey,
         sleeve0Mint: closable, sleeve1Mint: sleeve1,
         tokenProgram: T22, systemProgram: SystemProgram.programId,
@@ -168,7 +170,7 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
     const sm2 = Keypair.generate();
     const [v3] = PublicKey.findProgramAddressSync(
       [Buffer.from("vault"), ok.toBuffer()], program.programId);
-    await program.methods.initialize(FEE_BPS).accounts({
+    await program.methods.initialize(FEE_BPS, UNCAPPED).accounts({
       authority: authority.publicKey, vault: v3, shareMint: sm2.publicKey,
       sleeve0Mint: ok, sleeve1Mint: sleeve1,
       tokenProgram: T22, systemProgram: SystemProgram.programId,
@@ -391,5 +393,85 @@ it("initialize REJECTS a sleeve mint that can be closed and reinitialised", asyn
       }).signers([stranger]).rpc({ commitment: "confirmed" });
       assert.fail("stranger reconciled the vault");
     } catch (e: any) { assert.match(String(e), /ConstraintHasOne|has_one|Unauthorized|2001/); }
+  });
+  // ── deposit cap ────────────────────────────────────────────────────────────
+  // ⛔ The cap is PER SLEEVE in that sleeve's own base units. A single scalar "total held"
+  // cap would be summing SPYx at 8dp with USDY at 6dp and bounding neither.
+
+  it("set_deposit_cap is authority-gated", async function () {
+    this.timeout(60_000);
+    const stranger = Keypair.generate();
+    const sig = await connection.requestAirdrop(stranger.publicKey, 1_000_000_000);
+    await connection.confirmTransaction({ signature: sig, ...(await connection.getLatestBlockhash()) });
+    try {
+      await program.methods.setDepositCap(0, new BN(1)).accounts({
+        authority: stranger.publicKey, vault,
+      }).signers([stranger]).rpc({ commitment: "confirmed" });
+      assert.fail("a stranger changed the deposit cap");
+    } catch (e: any) { assert.match(String(e), /ConstraintHasOne|has_one|Unauthorized|2001/); }
+  });
+
+  it("a deposit that would cross the cap is REJECTED WHOLE, and the vault is unchanged", async function () {
+    this.timeout(60_000);
+    const v0: any = await program.account.vault.fetch(vault);
+    const held0 = BigInt(v0.sleeves[0].held.toString());
+    // cap one base unit above where we are: any real deposit must cross it
+    await program.methods.setDepositCap(0, new BN((held0 + 1n).toString()))
+      .accounts({ authority: authority.publicKey, vault }).rpc({ commitment: "confirmed" });
+
+    const before: any = await program.account.vault.fetch(vault);
+    try {
+      await program.methods.deposit([new BN(1_000_000), new BN(1_000_000)]).accounts({
+        depositor: authority.publicKey, vault, shareMint: shareMint.publicKey,
+        sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
+        vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
+        depositorShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID,
+        shareTokenProgram: T22,
+      }).rpc({ commitment: "confirmed" });
+      assert.fail("a deposit past the cap was accepted");
+    } catch (e: any) { assert.match(String(e), /DepositCapExceeded/); }
+
+    // ⛔ REJECTED WHOLE, NOT PARTIALLY FILLED. The transfer happens before `held` is known,
+    // so the only honest outcome is for the whole transaction to revert — a partial fill
+    // would mint a share count the depositor never computed.
+    const after: any = await program.account.vault.fetch(vault);
+    assert.equal(after.sleeves[0].held.toString(), before.sleeves[0].held.toString(), "sleeve 0 moved");
+    assert.equal(after.sleeves[1].held.toString(), before.sleeves[1].held.toString(), "sleeve 1 moved on a rejected deposit");
+  });
+
+  it("⛔ THE CAP NEVER BLOCKS REDEEM — a limit that can trap an exit is the failure it prevents", async function () {
+    this.timeout(60_000);
+    // leave the cap BELOW current held from the previous test: redeem must not consult it
+    const v: any = await program.account.vault.fetch(vault);
+    const cap = BigInt(v.sleeves[0].depositCap.toString());
+    const held = BigInt(v.sleeves[0].held.toString());
+    assert.isTrue(cap <= held + 1n, "precondition: the cap is at or below held");
+
+    const shares = (await getAccount(connection, userShareAta, "confirmed", T22)).amount / 4n;
+    assert.isTrue(shares > 0n, "nothing to redeem");
+    const hb = BigInt(v.sleeves[0].held.toString());
+    await program.methods.redeem(new BN(shares.toString()), 0b11).accounts({
+      redeemer: authority.publicKey, vault, shareMint: shareMint.publicKey,
+      sleeve0Mint: sleeve0, sleeve1Mint: sleeve1,
+      vaultAta0: vAta0, vaultAta1: vAta1, userAta0: uAta0, userAta1: uAta1,
+      redeemerShareAta: userShareAta, tokenProgram0: T22, tokenProgram1: TOKEN_PROGRAM_ID,
+      shareTokenProgram: T22,
+    }).rpc({ commitment: "confirmed" });
+    const va: any = await program.account.vault.fetch(vault);
+    assert.isTrue(BigInt(va.sleeves[0].held.toString()) < hb, "redeem did not pay out under a tight cap");
+  });
+
+  it("initialize REFUSES a zero cap — a stuck vault wearing the costume of a limit", async function () {
+    this.timeout(60_000);
+    const m = Keypair.generate();
+    const [v2] = PublicKey.findProgramAddressSync([Buffer.from("vault"), sleeve1.toBuffer()], program.programId);
+    try {
+      await program.methods.initialize(FEE_BPS, [new BN(0), new BN(1)]).accounts({
+        authority: authority.publicKey, vault: v2, shareMint: m.publicKey,
+        sleeve0Mint: sleeve1, sleeve1Mint: sleeve0,
+        tokenProgram: T22, systemProgram: SystemProgram.programId,
+      }).signers([m]).rpc({ commitment: "confirmed" });
+      assert.fail("a zero cap was accepted");
+    } catch (e: any) { assert.match(String(e), /ZeroDepositCap/); }
   });
 });

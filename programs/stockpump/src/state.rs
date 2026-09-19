@@ -13,6 +13,12 @@ pub const DEAD_SHARES: u64 = 1_000;
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace, Debug)]
 pub struct Sleeve {
     pub mint: Pubkey,
+    /// ⛔ THE CAP IS PER SLEEVE, IN THAT SLEEVE'S OWN BASE UNITS, and it has to be: the pot
+    /// holds SPYx at 8dp and USDY at 6dp, so a single scalar "total held" cap would be
+    /// summing two different units and bounding neither. Two numbers, each naming how much
+    /// of one real asset can be at risk, is the quantity a human can actually choose.
+    /// `u64::MAX` means uncapped.
+    pub deposit_cap: u64,
     /// INTERNAL ACCOUNTING, never `vault_ata.amount`. Reading the ATA would let anyone move
     /// NAV by donating tokens to it — free, permissionless, and it front-runs the first real
     /// depositor. This field and `transfer_in_measured` are ONE decision, not two: sourcing

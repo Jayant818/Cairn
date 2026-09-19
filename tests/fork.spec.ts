@@ -25,6 +25,8 @@ import { assert } from "chai";
 
 const SPYX = new PublicKey("XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W");
 const USDY = new PublicKey("A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6");
+/// u64::MAX per sleeve: the pre-cap tests are about other properties, so they run uncapped.
+const UNCAPPED = [new BN("18446744073709551615"), new BN("18446744073709551615")];
 const FEE_BPS = 100;
 
 describe("mainnet fork: real SPYx (Token-2022) + real USDY (classic SPL)", () => {
@@ -75,7 +77,7 @@ describe("mainnet fork: real SPYx (Token-2022) + real USDY (classic SPL)", () =>
 
   it("initialize accepts the real mainnet mints", async function () {
     this.timeout(120_000);
-    await program.methods.initialize(FEE_BPS).accounts({
+    await program.methods.initialize(FEE_BPS, UNCAPPED).accounts({
       authority: authority.publicKey, vault, shareMint: shareMint.publicKey,
       sleeve0Mint: SPYX, sleeve1Mint: USDY,
       tokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId,

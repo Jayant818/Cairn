@@ -114,9 +114,26 @@ must("var(--cobalt)", "the loss-absorption line in the market colour");
 // ⛔ It was spent FOUR times: the feed, two places in the staircase, and the risk box.
 // Colouring the last-riser annotation orange says "danger" about the product's best moment
 // and drains the one signal that has to mean something.
+// ⛔ AND THE COUNTER HAS TO FOLLOW THE PAINT, NOT THE MARKUP. When the risk line moved
+// from an inline style to a `.risk` class, this check read 0x and passed nothing — the
+// page was unchanged and the instrument had simply stopped looking where the colour now
+// lives. Count BOTH surfaces: inline styles, plus each stylesheet rule that sets orange
+// multiplied by how many times its class appears on the page.
 {
-  const n = (html.match(/var\(--orange\)/g) ?? []).length;
-  if (n !== 1) throw new Error(`orange used ${n}x — the ruling is ONCE, on issuer risk only`);
+  const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
+  const classCount = (c: string) =>
+    [...html.matchAll(/class="([^"]+)"/g)]
+      .flatMap((m) => m[1].split(/\s+/))
+      .filter((x) => x === c).length;
+  let n = (html.match(/style="[^"]*var\(--orange\)/g) ?? []).length;
+  for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)[^{]*\{[^}]*var\(--orange\)[^}]*\}/g))
+    n += classCount(m[1]);
+  if (n !== 1) throw new Error(`orange painted ${n}x — the ruling is ONCE, on issuer risk only`);
+  // control: the counter must see a colour that IS on the page more than once
+  let sf = (html.match(/style="[^"]*var\(--seafoam\)/g) ?? []).length;
+  for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)[^{]*\{[^}]*var\(--seafoam\)[^}]*\}/g))
+    sf += classCount(m[1]);
+  if (sf < 2) throw new Error(`control failed: the paint counter found seafoam only ${sf}x`);
 }
 
 // ── an undefined CSS var fails SILENTLY, so cross-reference every one used ──
@@ -166,6 +183,47 @@ if (prose > 80) {
 }
 // control: the counter must be able to SEE the sentences it is scoring
 if (blocks.length < 4) throw new Error("control failed: the prose scan found almost nothing");
+
+// ── every class the page uses must actually be defined ─────────────────────
+// ⛔ THIS IS WHY IT EXISTS: `eyebrow`, `caption`, `display` and `display-md` were used in
+// the feed and defined in NONE of the stylesheet. An undefined class throws nothing and
+// logs nothing — it just renders at the wrong size, exactly like an undefined custom
+// property. The only way to catch it is to diff the two lists.
+{
+  const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
+  const defined = new Set(
+    [...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]),
+  );
+  const used = new Set(
+    [...html.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean),
+  );
+  // control: the diff must be able to SEE a class that is genuinely absent
+  if (defined.has("cairn-control-absent"))
+    throw new Error("control failed: the sentinel class is defined in the stylesheet");
+  const missing = [...used].filter((c) => !defined.has(c));
+  if (missing.length) throw new Error(`class used but never defined in index.css: ${missing.join(", ")}`);
+  if (used.size < 10) throw new Error(`control failed: only ${used.size} classes seen on the page`);
+}
+
+// ── a shorthand on a class that COMPOSES is a reset ────────────────────────
+// ⛔ `.nav` and `.hero` are both used AS `class="container nav"`. Each set `padding: X 0`,
+// which zeroed `.container`'s 20px side gutters. Desktop hid it behind `margin: 0 auto`;
+// on a phone the headline ran off the left edge. Nothing threw. So: any class that shares
+// an element with `.container` must use `padding-block`, never the shorthand.
+{
+  const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
+  const composed = new Set(
+    [...html.matchAll(/class="([^"]*\bcontainer\b[^"]*)"/g)]
+      .flatMap((m) => m[1].split(/\s+/))
+      .filter((c) => c && c !== "container"),
+  );
+  if (!composed.size) throw new Error("control failed: no class composes with .container");
+  for (const c of composed) {
+    const rule = css.match(new RegExp(`\\.${c}\\b[^{]*\\{([^}]*)\\}`));
+    if (rule && /(^|;)\s*padding\s*:/.test(rule[1]))
+      throw new Error(`.${c} composes with .container and sets the padding shorthand — that kills its side gutters`);
+  }
+}
 
 console.log(`render selfcheck PASS — ${html.length} B · prose ${prose}/80 words · all ${recordedSource.steps().length} signatures`);
 void perShare;

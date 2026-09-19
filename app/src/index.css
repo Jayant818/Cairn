@@ -56,8 +56,17 @@ a { color: var(--text); text-decoration-color: var(--text-3); }
 }
 
 .container { max-width: 1090px; margin: 0 auto; padding: 0 20px; }
-.band { padding: 50px 0; border-top: 1px solid var(--hairline); }
-.band-tight { padding: 30px 0; }
+
+/* ⛔ FULL-BLEED SECTIONS, content still 1090. The reference alternates a ground band and a
+   raised band across the whole viewport; before this every section was a hairline rule
+   inside one column, which is what made the page read as a document. Rhythm is theirs:
+   50px block padding, 30px for the tight ones. */
+.sec { padding: 50px 0; position: relative; }
+.sec-alt  { background: var(--surface); border-block: 1px solid var(--hairline); }
+.sec-hero { padding: 0; overflow: hidden; }
+.sec-risk { padding: 30px 0; border-top: 1px solid var(--hairline); }
+.sec-foot { padding: 40px 0 56px; background: #08080a; border-top: 1px solid var(--hairline); }
+.sec-title { margin-top: 10px; }
 
 /* CAPS = label treatment only, always with tracking. ⛔ Never the h1. */
 .label {
@@ -89,11 +98,17 @@ h3 { font-size: 1.15rem; font-variation-settings: 'wdth' 112, 'wght' 600; }
   background: #10201b; border-bottom: 1px solid var(--hairline);
   padding: 10px 0; font-size: 14px; color: var(--text-2);
 }
+/* ⛔ padding-BLOCK, not the shorthand. `.nav` and `.hero` both carry `.container`, and
+   `padding: 18px 0` silently reset its 20px side gutters to zero. At 1440 the auto margins
+   hid it completely; at phone width the headline started hard against the left edge with
+   the nav link cut off. A shorthand on a class that COMPOSES with another is a reset. */
+/* no border here: .nav-bar carries it full-bleed. Keeping both drew the rule twice and
+   the inner one stopped at 1090, so the nav looked like it ended mid-viewport. */
 .nav { display: flex; align-items: center; justify-content: space-between;
-       padding: 18px 0; border-bottom: 1px solid var(--hairline); }
+       padding-block: 18px; }
 
 .hero { display: grid; grid-template-columns: 55% 45%; gap: 2rem; align-items: center;
-        padding: 64px 0 56px; position: relative; }
+        padding-block: 64px 56px; position: relative; }
 @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
 
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
@@ -104,3 +119,51 @@ h3 { font-size: 1.15rem; font-variation-settings: 'wdth' 112, 'wght' 600; }
 /* the staircase draws itself once on load */
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes fade { to { opacity: 1; } }
+
+/* ── added with the full-bleed pass ───────────────────────────────────────── */
+.nav-bar { border-bottom: 1px solid var(--hairline); }
+.wordmark {
+  font-family: var(--font-display); font-variation-settings: 'wdth' 120, 'wght' 700;
+  text-transform: uppercase; letter-spacing: 1.5px; color: var(--text);
+}
+/* 12px caption: the feed's numbers and the footer's addresses. It was USED in five places
+   and defined in none — undefined classes fail silently, so those rows were rendering at
+   body size. Same class of bug as an undefined custom property. */
+.caption { font-size: 12px; line-height: 1.5; }
+.eyebrow { font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+           text-transform: uppercase; letter-spacing: 2px; color: var(--text-3); }
+
+.hero-copy > .lead { margin-top: 22px; }
+.hero-copy > .cta  { margin-top: 26px; }
+
+/* ⛔ SEAFOAM MEANS "ONLY RISES" AND NOTHING ELSE MAY WEAR IT. Painting all three glyphs
+   seafoam was the palette lying: only the ratchet is a monotone claim. The other two are
+   mechanics, so they are neutral — which also makes the ratchet the card your eye lands
+   on, and the ratchet IS the claim. */
+.glyph { display: block; color: var(--text-3); margin-bottom: 14px; }
+.glyph-claim { color: var(--seafoam); }
+.card > h3 + .small { margin: 10px 0 0; }
+.cards { margin-top: 32px; }
+.disclosure { margin: 28px 0 0; color: var(--cobalt); }
+.risk { color: var(--orange); }
+
+.foot { display: grid; grid-template-columns: 1fr 1.6fr 1.6fr; gap: 2rem;
+        color: var(--text-3); }
+.foot .label { margin-bottom: 6px; }
+.foot-gap  { margin-top: 16px; }
+.foot-note { margin-top: 8px; }
+@media (max-width: 760px) { .foot { grid-template-columns: 1fr; } }
+
+/* ── the receipts card ────────────────────────────────────────────────────── */
+.feed { padding: 24px; }
+.feed-rows { margin-top: 16px; border-top: 1px solid var(--hairline); }
+.feed-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid var(--hairline); align-items: baseline;
+}
+.feed-kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.feed-more { padding: 14px 0; color: var(--text-3); cursor: pointer; list-style: none; }
+.feed-more::-webkit-details-marker { display: none; }
+.feed-more::before { content: "+ "; }
+details[open] > .feed-more::before { content: "– "; }
+.feed-more:hover { color: var(--text-2); }

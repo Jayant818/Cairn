@@ -7,7 +7,6 @@ skip-lint = false
 
 [programs.localnet]
 cairn = "EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL"
-stockpump = "5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY"
 
 [registry]
 url = "https://api.apr.dev"
@@ -17,4 +16,4 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "npx ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/cairn.spec.ts"

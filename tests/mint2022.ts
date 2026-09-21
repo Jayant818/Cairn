@@ -88,27 +88,3 @@ export async function createTestMint(
   await sendAndConfirmTransaction(connection, tx, [payer, mintKp], { commitment: "confirmed" });
   return mint;
 }
-
-
-/// A CLASSIC SPL mint (Tokenkeg), for the sleeve that mirrors USDY.
-///
-/// ⛔ THIS EXISTS BECAUSE ITS ABSENCE HID A REAL DEFECT. Every local test built both sleeves
-/// under Token-2022, so a single `token_program` account served both CPIs and nothing noticed
-/// that the real pair is SPYx (TokenzQd) + USDY (Tokenkeg). The harness mirrored SPYx
-/// faithfully and got USDY's PROGRAM wrong — the one property that mattered.
-export async function createClassicMint(
-  connection: Connection, payer: Keypair, decimals: number,
-): Promise<PublicKey> {
-  const { TOKEN_PROGRAM_ID, MINT_SIZE, createInitializeMint2Instruction: initMint2 } = require("@solana/spl-token");
-  const kp = Keypair.generate();
-  const lamports = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
-  const tx = new Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: payer.publicKey, newAccountPubkey: kp.publicKey,
-      space: MINT_SIZE, lamports, programId: TOKEN_PROGRAM_ID,
-    }),
-    initMint2(kp.publicKey, decimals, payer.publicKey, payer.publicKey, TOKEN_PROGRAM_ID),
-  );
-  await sendAndConfirmTransaction(connection, tx, [payer, kp], { commitment: "confirmed" });
-  return kp.publicKey;
-}

@@ -15,10 +15,7 @@ set -euo pipefail
 export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 TOOLS="${SBF_TOOLS_VERSION:-v1.55}"
 cd "$(dirname "$0")"
-cargo-build-sbf --tools-version "$TOOLS" --manifest-path programs/stockpump/Cargo.toml
 cargo-build-sbf --tools-version "$TOOLS" --manifest-path programs/cairn/Cargo.toml
-anchor idl build -p stockpump -o target/idl/stockpump.json
 anchor idl build -p cairn -o target/idl/cairn.json
 echo "built on platform-tools $TOOLS"
-readelf -h target/deploy/stockpump.so | grep -E "Flags"
 readelf -h target/deploy/cairn.so | grep -E "Flags"

@@ -3,7 +3,7 @@
 #
 # WHY THIS EXISTS AND WHY IT IS NOT WHAT THE UI READS: a deployed program id a judge can
 # open in an explorer is cheap, checkable proof that the program is real and on a public
-# cluster. It is NOT the demo's data source — devnet has no SPYx and no USDY, so anything
+# cluster. It is NOT the demo's data source: devnet has no SPYx, so anything
 # transacting there would be against MODEL mints, which is the substitution that let a green
 # suite agree with broken code for four commits. Deploy the program; keep the demo on the fork.
 #
@@ -18,7 +18,7 @@ URL=${DEVNET_URL:-https://api.devnet.solana.com}
 # a different project plus its own cluster, so a bare `solana` here has no signer and the
 # wrong network — and it fails as "No default signer found", which reads as a missing wallet.
 KEYPAIR=${SOLANA_KEYPAIR:-$HOME/.config/solana/id.json}
-PROGRAM_ID=$(solana address -k target/deploy/stockpump-keypair.json)
+PROGRAM_ID=$(solana address -k target/deploy/cairn-keypair.json)
 
 if [ "${1:-}" != "--yes" ]; then
   echo "DRY RUN — pass --yes to actually deploy."
@@ -26,8 +26,8 @@ if [ "${1:-}" != "--yes" ]; then
   echo "  deployer    $(solana address -k "$KEYPAIR")"
   echo "  balance     $(solana balance -u "$URL" -k "$KEYPAIR")"
   echo "  program id  $PROGRAM_ID"
-  echo "  .so         $(stat -c %s target/deploy/stockpump.so) bytes"
-  echo "  rent needed $(solana rent $((45 + 2 * $(stat -c %s target/deploy/stockpump.so))) -u "$URL" | head -1)"
+  echo "  .so         $(stat -c %s target/deploy/cairn.so) bytes"
+  echo "  rent needed $(solana rent $((45 + 2 * $(stat -c %s target/deploy/cairn.so))) -u "$URL" | head -1)"
   solana account "$PROGRAM_ID" -u "$URL" -k "$KEYPAIR" >/dev/null 2>&1 \
     && echo "  state       ALREADY DEPLOYED — this would be an UPGRADE, not a first deploy" \
     || echo "  state       absent — first deploy"
@@ -43,8 +43,8 @@ anchor deploy --provider.cluster "$URL" --provider.wallet "$KEYPAIR"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 solana -u "$URL" program dump "$PROGRAM_ID" "$TMP/on-chain.so" >/dev/null
-if cmp -s "$TMP/on-chain.so" target/deploy/stockpump.so; then
-  echo "VERIFIED: on-chain bytes are identical to target/deploy/stockpump.so"
+if cmp -s "$TMP/on-chain.so" target/deploy/cairn.so; then
+  echo "VERIFIED: on-chain bytes are identical to target/deploy/cairn.so"
 else
   echo "⛔ MISMATCH: on-chain bytes differ from the local build. Do not publish this id." >&2
   exit 1

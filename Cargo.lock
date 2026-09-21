@@ -3022,15 +3022,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stockpump"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "proptest",
-]
-
-[[package]]
 name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

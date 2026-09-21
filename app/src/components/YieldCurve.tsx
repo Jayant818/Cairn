@@ -6,8 +6,8 @@ import { AnimatedNumber } from "./MotionUI";
 export function lenderApy(utilization: number) {
   const borrowRate =
     utilization <= 80
-      ? 1 + (9 * utilization) / 80
-      : 10 + (90 * (utilization - 80)) / 20;
+      ? 2 + (12 * utilization) / 80
+      : 14 + (86 * (utilization - 80)) / 20;
   return (borrowRate * utilization * 0.9) / 100;
 }
 
@@ -20,7 +20,9 @@ export function YieldCurve({
 }) {
   const reduce = useReducedMotion();
   const x = 24 + utilization * 3.4;
-  const y = utilization <= 80 ? 184 - utilization * 1.1 : 96 - (utilization - 80) * 3.4;
+  const y = utilization <= 80
+    ? 184 - (88 * utilization) / 80
+    : 96 - (68 * (utilization - 80)) / 20;
 
   return (
     <section className="curve-card" aria-labelledby="curve-title">
@@ -38,11 +40,12 @@ export function YieldCurve({
         <path className="curve-grid" d="M24 184H364M24 140H364M24 96H364M24 52H364" />
         <motion.path
           className="curve-line"
-          d="M24 184H92V166H160V148H228V125H296V96H330V62H364V28"
+          d="M24 184 L296 96 C320 88 346 54 364 28"
           initial={reduce ? false : { pathLength: 0 }}
           animate={{ pathLength: 1 }}
           transition={{ duration: 1.15, ease: [0.16, 1, 0.3, 1] }}
         />
+        <path className="curve-kink" d="M296 184V96" />
         <motion.circle
           className="curve-point"
           r="6"
@@ -50,7 +53,8 @@ export function YieldCurve({
           transition={{ type: "spring", stiffness: 260, damping: 28 }}
         />
         <text x="24" y="210">0% utilization</text>
-        <text x="301" y="210">100%</text>
+        <text x="258" y="210">80% kink</text>
+        <text x="339" y="210">100%</text>
       </svg>
       <label className="range-label" htmlFor="utilization">
         <span>Pool utilization</span>

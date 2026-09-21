@@ -1,76 +1,42 @@
-import { perShare, type Meta, type Step } from "../lib/source";
+import type { LendingEvent, ReplayMeta } from "../lib/source";
 
-const shortSig = (s: string) => `${s.slice(0, 6)}…${s.slice(-6)}`;
+const short = (value: string) => `${value.slice(0, 4)}...${value.slice(-4)}`;
 
-/** Signatures are from a LOCAL fork, so the link spells out `?cluster=custom`: a bare
- *  mainnet link would 404 and read as a fabricated hash. Better explicitly un-resolvable
- *  than quietly wrong. */
-const solscan = (sig: string) =>
-  `https://solscan.io/tx/${sig}?cluster=custom&customUrl=http%3A%2F%2F127.0.0.1%3A8899`;
-
-function Row({ meta, s }: { meta: Meta; s: Step }) {
-  const partial = s.sleeveMask !== undefined && s.sleeveMask !== 0b11;
+function EventRow({ event }: { event: LendingEvent }) {
+  const yieldEvent = event.kind === "accrue" || event.kind === "redeem";
   return (
-    <div className="feed-row">
-      <div style={{ minWidth: 0 }}>
-        <span
-          className="mono feed-kind"
-          style={{ color: s.kind === "redeem" ? "var(--cobalt)" : "var(--text-3)" }}
-        >
-          {s.kind}
-        </span>
-        <span style={{ marginLeft: 10, color: "var(--text-2)", fontSize: 14 }}>{s.label}</span>
-        {s.kind === "bootstrap" && (
-          <span className="caption" style={{ marginLeft: 8 }}>— founder row, stated as one</span>
-        )}
-        {partial && (
-          <div className="caption" style={{ color: "var(--text-3)", marginTop: 4, fontWeight: 500 }}>
-            Cash leg only — shares burned in full.
-          </div>
-        )}
-      </div>
-      <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-        <div className="mono caption">
-          {meta.sleeves.map((sl, i) => {
-            const v = perShare(s.held[i], s.shareSupply, sl.decimals);
-            return (
-              <span key={sl.mint} style={{ marginLeft: 12, color: "var(--seafoam)" }}>
-                {v === null ? "—" : v.toFixed(sl.decimals)} {sl.symbol}/sh
-              </span>
-            );
-          })}
+    <article className={`activity-row${yieldEvent ? " activity-yield" : ""}`}>
+      <div className="activity-sequence">{String(event.seq).padStart(2, "0")}</div>
+      <div className="activity-copy">
+        <div className="activity-meta">
+          <span>{event.kind}</span>
+          <span>slot {event.slot}</span>
+          <span>{short(event.actor)}</span>
         </div>
-        <a className="mono caption" href={solscan(s.signature)} target="_blank" rel="noreferrer"
-           title="Signature from the recorded fork — resolvable only against that validator">
-          {shortSig(s.signature)}
-        </a>
+        <p>{event.message}</p>
       </div>
-    </div>
+      <code title={event.signature}>{short(event.signature)}</code>
+    </article>
   );
 }
 
-/** One row per transaction, newest first, mono throughout. The hash is the proof, so it is
- *  a link and not decoration.
- *  ⛔ Only four rows are open. The nine rows were ~35% of the page's height on what is
- *  meant to be a landing page. The rest stay IN THE DOM behind a native <details> — so
- *  ctrl-F, the render selfcheck and a judge reading source all still see every signature. */
-export function Feed({ meta, steps }: { meta: Meta; steps: Step[] }) {
-  const rows = [...steps].reverse();
-  const head = rows.slice(0, 4);          // the redeem pair + two deposits = the whole story
-  const rest = rows.slice(4);
+export function Feed({ meta, events }: { meta: ReplayMeta; events: LendingEvent[] }) {
   return (
-    <section className="card feed">
-      <div className="eyebrow">Receipts</div>
-      <h2 style={{ marginTop: 10 }}>Every transaction in the recording</h2>
-      <div className="feed-rows">
-        {head.map((s) => <Row key={s.signature} meta={meta} s={s} />)}
-        {rest.length > 0 && (
-          <details>
-            <summary className="small feed-more">{rest.length} earlier transactions</summary>
-            {rest.map((s) => <Row key={s.signature} meta={meta} s={s} />)}
-          </details>
-        )}
+    <section className="activity-card" aria-labelledby="activity-title">
+      <div className="activity-head">
+        <div>
+          <div className="eyebrow">Fork activity</div>
+          <h2 id="activity-title">The full lending loop.</h2>
+        </div>
+        <div className="activity-source">
+          <span>Recorded replay</span>
+          <strong>{meta.market}</strong>
+        </div>
       </div>
+      <div className="activity-list">
+        {events.map((event) => <EventRow event={event} key={event.signature} />)}
+      </div>
+      <p className="microcopy">{meta.caveats[0]}</p>
     </section>
   );
 }

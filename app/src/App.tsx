@@ -7,16 +7,17 @@ import {
   Reveal,
   SwapPanel,
 } from "./components/MotionUI";
+import { Feed } from "./components/Feed";
 import { lenderApy, YieldCurve } from "./components/YieldCurve";
+import { recordedControls } from "./lib/issuerControls";
+import { recordedSource } from "./lib/source";
 
-const EXCHANGE_RATE = 1.0184;
+const EXCHANGE_RATE = 1.0215;
+const STOCK_PRICE = 200;
+const MIN_COLLATERALIZATION = 120;
 type Action = "Lend" | "Borrow";
 
-const markets = [
-  { ticker: "AAPL", receipt: "cAAPL", utilization: 64, status: "V2 reference market" },
-  { ticker: "SPY", receipt: "cSPY", utilization: 42, status: "Planned" },
-  { ticker: "TSLA", receipt: "cTSLA", utilization: 78, status: "Planned" },
-] as const;
+const spyxControls = recordedControls.find((mint) => mint.symbol === "SPYx")!;
 
 function cleanAmount(value: string) {
   const parsed = Number(value);
@@ -28,14 +29,16 @@ export default function App() {
   const [depositAmount, setDepositAmount] = useState("10");
   const [collateralAmount, setCollateralAmount] = useState("5000");
   const [borrowAmount, setBorrowAmount] = useState("10");
-  const [utilization, setUtilization] = useState(64);
+  const [utilization, setUtilization] = useState(68.2);
   const [previewed, setPreviewed] = useState(false);
 
   const receiptAmount = cleanAmount(depositAmount) / EXCHANGE_RATE;
   const collateral = cleanAmount(collateralAmount);
   const borrowed = cleanAmount(borrowAmount);
-  const health = borrowed > 0 ? collateral / (borrowed * 200) : 0;
+  const collateralization = borrowed > 0 ? (collateral / (borrowed * STOCK_PRICE)) * 100 : 0;
+  const health = collateralization / MIN_COLLATERALIZATION;
   const currentApy = useMemo(() => lenderApy(utilization), [utilization]);
+  const replay = recordedSource;
 
   return (
     <main>
@@ -59,18 +62,25 @@ export default function App() {
         </div>
       </nav>
 
+      <dl className="shell kpi-bar" aria-label="SPYx market indicators">
+        <div><dt>Total managed equity</dt><dd>1,420.50 SPYx</dd></div>
+        <div><dt>Pool utilization</dt><dd><AnimatedNumber value={utilization} precision={1} />%</dd></div>
+        <div><dt>Staker APY</dt><dd><AnimatedNumber value={currentApy} precision={2} />%</dd></div>
+        <div><dt>Exchange rate</dt><dd>1 cSPYx = {EXCHANGE_RATE.toFixed(4)} SPYx</dd></div>
+      </dl>
+
       <section className="shell hero" id="top">
         <Reveal>
           <div className="hero-copy">
             <div className="eyebrow">Solana securities lending</div>
             <h1>The LST layer for tokenized equities</h1>
             <p>
-              Deposit tokenized AAPL. Receive cAAPL. Market makers borrow the stock and pay
-              interest back to cAAPL holders.
+              Deposit tokenized SPYx. Receive cSPYx. Market makers borrow the stock and pay
+              interest back to cSPYx holders.
             </p>
             <div className="hero-actions">
               <a className="text-action" href="#market">
-                Explore the AAPL market <span>↓</span>
+                Explore the SPYx market <span>↓</span>
               </a>
               <span className="hero-proof">Token-2022 native</span>
             </div>
@@ -78,28 +88,28 @@ export default function App() {
         </Reveal>
 
         <Reveal delay={0.12}>
-          <div className="receipt-visual" aria-label="AAPL deposit becomes cAAPL">
+          <div className="receipt-visual" aria-label="SPYx deposit becomes cSPYx">
             <div className="receipt-topline">
               <span>CAIRN RECEIPT</span>
               <AnimatedBadge tone="safe">Eligible</AnimatedBadge>
             </div>
-            <div className="receipt-symbol">cAAPL</div>
+            <div className="receipt-symbol">cSPYx</div>
             <div className="receipt-flow">
               <div>
                 <span>Deposit</span>
-                <strong>10.0000 AAPL</strong>
+                <strong>10.0000 SPYx</strong>
               </div>
               <div className="flow-line" aria-hidden="true">
                 <span />
               </div>
               <div>
                 <span>Receive</span>
-                <strong>9.8193 cAAPL</strong>
+                <strong>9.7895 cSPYx</strong>
               </div>
             </div>
             <div className="receipt-rate">
               <span>Exchange rate</span>
-              <strong>1 cAAPL = {EXCHANGE_RATE.toFixed(4)} AAPL</strong>
+              <strong>1 cSPYx = {EXCHANGE_RATE.toFixed(4)} SPYx</strong>
             </div>
             <div className="receipt-foot">Yield accrues through the exchange rate, not rebases.</div>
           </div>
@@ -111,44 +121,36 @@ export default function App() {
           <Reveal delay={0.18}>
             <div className="market-copy">
               <div className="eyebrow">Reference market</div>
-              <h2>AAPL in. cAAPL out.</h2>
+              <h2>SPYx in. cSPYx out.</h2>
               <p>
                 One isolated market holds one equity. Borrow demand sets its rate. Other
-                markets cannot spread debt or issuer risk into AAPL.
+                markets cannot spread debt or issuer risk into SPYx.
               </p>
 
-              <dl className="market-stats">
-                <div>
-                  <dt>Modeled lender APY</dt>
-                  <dd>
-                    <AnimatedNumber value={currentApy} precision={2} />%
-                  </dd>
-                </div>
-                <div>
-                  <dt>Available liquidity</dt>
-                  <dd>36.00%</dd>
-                </div>
-                <div>
-                  <dt>Collateral</dt>
-                  <dd>USDC</dd>
-                </div>
-              </dl>
-
-              <div className="market-list" aria-label="Planned Cairn markets">
-                {markets.map((market) => (
-                  <div className="market-row" key={market.ticker}>
-                    <span className="ticker">{market.ticker}</span>
-                    <span>{market.receipt}</span>
-                    <span>{market.utilization}% used</span>
-                    <small>{market.status}</small>
-                  </div>
-                ))}
+              <div className="market-rails" aria-label="SPYx market structure">
+                <div><span>Equity</span><strong>SPYx, Token-2022</strong></div>
+                <div><span>Receipt</span><strong>cSPYx</strong></div>
+                <div><span>Borrow collateral</span><strong>USDC</strong></div>
+                <div><span>Withdrawal available</span><strong>31.8%</strong></div>
               </div>
             </div>
           </Reveal>
 
           <Reveal delay={0.24}>
             <div className="action-card">
+              <label className="stock-label" htmlFor="stock-market">Stock inventory</label>
+              <select className="stock-select" id="stock-market" value="SPYx" disabled>
+                <option>SPYx</option>
+              </select>
+              <div className="underwriting-panel">
+                <div className="underwriting-head">
+                  <span>Audit &amp; Compliance</span>
+                  <strong>APPROVED BY ON-CHAIN POLICY (PASS)</strong>
+                </div>
+                <div><span>Permanent Delegate</span><strong title={spyxControls.seize ?? ""}>Policy-matched issuer key</strong></div>
+                <div><span>Transfer Hook</span><strong>Verified non-blocking</strong></div>
+                <div><span>Freeze Authority</span><strong title={spyxControls.freeze ?? ""}>Issuer-controlled, mirrored</strong></div>
+              </div>
               <MotionTabs value={action} options={["Lend", "Borrow"] as const} onChange={setAction} />
               <SwapPanel panelKey={action}>
                 {action === "Lend" ? (
@@ -164,17 +166,17 @@ export default function App() {
                           setPreviewed(false);
                         }}
                       />
-                      <span>AAPL</span>
+                      <span>SPYx</span>
                     </div>
                     <div className="receive-line">
                       <span>You receive</span>
                       <strong>
-                        <AnimatedNumber value={receiptAmount} precision={4} /> cAAPL
+                        <AnimatedNumber value={receiptAmount} precision={4} /> cSPYx
                       </strong>
                     </div>
                     <div className="action-facts">
-                      <span>Rate</span><strong>1.0184 AAPL</strong>
-                      <span>Available now</span><strong>36.00%</strong>
+                      <span>Rate</span><strong>{EXCHANGE_RATE.toFixed(4)} SPYx</strong>
+                      <span>Withdrawal available</span><strong>31.8%</strong>
                       <span>Issuer gate</span><strong className="safe-text">Passed</strong>
                     </div>
                     <MotionButton onClick={() => setPreviewed(true)} disabled={receiptAmount === 0}>
@@ -194,7 +196,7 @@ export default function App() {
                       />
                       <span>USDC</span>
                     </div>
-                    <label htmlFor="borrow-amount">AAPL to borrow</label>
+                    <label htmlFor="borrow-amount">SPYx to borrow</label>
                     <div className="amount-field amount-field-secondary">
                       <input
                         id="borrow-amount"
@@ -202,11 +204,16 @@ export default function App() {
                         value={borrowAmount}
                         onChange={(event) => setBorrowAmount(event.target.value)}
                       />
-                      <span>AAPL</span>
+                      <span>SPYx</span>
                     </div>
                     <div className="receive-line">
-                      <span>Modeled health factor</span>
+                      <span>Health factor</span>
                       <strong>{health.toFixed(2)}x</strong>
+                    </div>
+                    <div className={`health-warning ${collateralization < MIN_COLLATERALIZATION ? "health-danger" : ""}`}>
+                      <span>Collateralization ratio</span>
+                      <strong>{collateralization.toFixed(1)}%</strong>
+                      <small>Minimum {MIN_COLLATERALIZATION}%. Liquidation begins below the threshold.</small>
                     </div>
                     <MotionButton variant="secondary">Inspect borrow position</MotionButton>
                     <p className="microcopy">Fresh Pyth spot and TWAP validation are required.</p>
@@ -220,6 +227,10 @@ export default function App() {
 
       <section className="shell curve-section">
         <YieldCurve utilization={utilization} onChange={setUtilization} />
+      </section>
+
+      <section className="shell activity-section" id="activity">
+        <Feed meta={replay.meta()} events={replay.events()} />
       </section>
 
       <section className="risk-band" id="risk">
@@ -249,12 +260,12 @@ export default function App() {
           <h2>One global borrow index. No borrower loops.</h2>
         </div>
         <div className="architecture-flow" aria-label="Cairn transaction flow">
-          <span>Deposit AAPL</span><i>01</i>
-          <span>Mint cAAPL</span><i>02</i>
+          <span>Deposit SPYx</span><i>01</i>
+          <span>Mint cSPYx</span><i>02</i>
           <span>Post USDC</span><i>03</i>
-          <span>Borrow AAPL</span><i>04</i>
+          <span>Borrow SPYx</span><i>04</i>
           <span>Accrue interest</span><i>05</i>
-          <span>Redeem AAPL</span><i>06</i>
+          <span>Redeem SPYx</span><i>06</i>
         </div>
       </section>
 

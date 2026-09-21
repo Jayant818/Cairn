@@ -6,6 +6,7 @@ import App from "./App";
 const html = renderToStaticMarkup(<App />);
 const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 const motionSource = readFileSync(new URL("./components/MotionUI.tsx", import.meta.url), "utf8");
 
 const must = (value: string, reason: string) => {
@@ -14,7 +15,12 @@ const must = (value: string, reason: string) => {
 
 must("The LST layer for tokenized equities", "product tagline");
 must("Interface preview. No live market is connected.", "non-live disclosure");
-must("cAAPL", "receipt asset");
+must("cSPYx", "receipt asset");
+must("Total managed equity", "prime-brokerage KPI bar");
+must("APPROVED BY ON-CHAIN POLICY (PASS)", "underwriting decision");
+if (!appSource.includes("Minimum {MIN_COLLATERALIZATION}%"))
+  throw new Error("MISSING: borrow liquidation threshold");
+must("deposited 10.0 SPYx", "lifecycle activity feed");
 must("Pyth verified", "oracle verification status");
 must("Deviation guard", "TWAP policy");
 must("Inactive only", "active transfer hook rejection");
@@ -42,7 +48,7 @@ if (missingClasses.length) throw new Error(`undefined CSS classes: ${missingClas
 const seafoamRules = [...css.matchAll(/([^{}]+)\{[^{}]*var\(--seafoam\)[^{}]*\}/g)].map(
   (match) => match[1].trim(),
 );
-if (!seafoamRules.length || seafoamRules.some((selector) => !/(market-stats|curve)/.test(selector))) {
+if (!seafoamRules.length || seafoamRules.some((selector) => !/(kpi-bar|curve|activity-yield)/.test(selector))) {
   throw new Error(`seafoam used outside yield semantics: ${seafoamRules.join(", ")}`);
 }
 

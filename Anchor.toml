@@ -6,6 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
+cairn = "EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL"
 stockpump = "5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY"
 
 [registry]

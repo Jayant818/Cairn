@@ -1,200 +1,358 @@
 # Cairn
 
-**Stake the stocks you already hold.** Put tokenized S&P 500 into a pot, get **pSPY** back,
-and the amount of stock standing behind your pSPY goes up every time anybody else trades.
+## The LST layer for tokenized equities
 
-[**Live page**](https://stockpump-one.vercel.app) ·
-[**Program on Solana Explorer**](https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet) ·
-[nine recorded transactions](#the-numbers-including-the-one-that-flatters-us)
+Cairn turns tokenized stocks into liquid, yield-bearing positions.
 
----
+Deposit a tokenized equity such as AAPL. Receive **cAAPL**. Market makers borrow
+the deposited AAPL against USDC collateral. Their borrow interest increases the
+AAPL claim behind each cAAPL.
 
-## Why this exists
+> Deposit AAPL. Receive cAAPL. Earn stock-borrow yield while cAAPL stays liquid.
 
-Tokenized equity on Solana is real now — Backed lists twenty xStocks, and SPYx and USDY are
-live mainnet mints today. But holding a tokenized stock does nothing that holding the stock
-does not. There is no on-chain reason to prefer the tokenized version.
+[Legacy interface](https://stockpump-one.vercel.app) |
+[Legacy devnet program](https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet)
 
-Cairn gives it one. **Every deposit and every redemption leaves 1% in the pot, and there is
-no treasury address to sweep it out to**, so it lands on the shares already there. The
-number of shares behind your receipt token only goes up. It cannot go down, because no code
-path lowers it.
+> [!IMPORTANT]
+> Cairn V2 is implemented and builds locally. It is not deployed. The public
+> devnet address still runs the earlier two-asset fee prototype. See
+> [Current state](#current-state).
 
-⇒ Structurally this is a **liquid staking token whose underlying is stock**. You hold mSOL
-and the SOL behind it rises; you hold pSPY and the SPYx behind it rises. The difference is
-where the yield comes from: an LST pays from validator rewards, which accrue with **time**.
-**Cairn pays from other people's trades, which accrue with flow.** A quiet week pays nothing,
-and the README says so because the page does.
+## What Cairn does
 
-## What it offers
+| Participant  | Action                                    | Result                                    |
+| ------------ | ----------------------------------------- | ----------------------------------------- |
+| Stock holder | Deposits tokenized AAPL                   | Receives policy-matched cAAPL              |
+| Market maker | Deposits USDC collateral and borrows AAPL | Gets inventory for trading and settlement |
+| cAAPL holder | Holds or uses cAAPL in DeFi               | Earns the AAPL borrow rate                |
+| Liquidator   | Repays unsafe debt                        | Receives discounted collateral            |
 
-| | |
-|---|---|
-| **One pot per stock** | Each pot pairs one tokenized stock with dollars and mints its own receipt token — SPYx → **pSPY**, a Tesla pot would mint **pTSLA**. Pots ratchet independently. |
-| **In-kind, always** | Deposit and redeem move the real assets. No oracle, no price, no swap in the money path. |
-| **A count, not a price** | The claim is *how many* SPYx sit behind one pSPY. A count is checkable on chain by anyone; a price is a thing you have to trust somebody about. |
-| **A deposit cap** | Per-pot, per-sleeve, authority-settable, and it **never blocks redeem**. Bounds what a bug can cost while the program is young. |
+cAAPL is a **liquid lending receipt**. “LST for stocks” is the simple product
+model. It is not validator staking. The yield comes from securities lending.
 
-## The numbers, including the one that flatters us
+## Product features
 
-From the nine recorded transactions in `app/src/data/fork-run.json`, against the real mints:
-
-| | |
-|---|---|
-| **+4.7245%** | total rise in SPYx-per-share across the whole run |
-| **+4.1172%** | …of which **one person** redeemed only their cash leg and abandoned their stock. **That is not the product.** |
-| **+0.5833%** | the fee ratchet on its own — the number the mechanism actually produced |
-| **−1.99%** | what a round trip costs you, 1% in and 1% out |
-
-⇒ **At the volume in that recording, roughly twenty other people have to trade before a
-depositor is back to even.** This is a claim on other people's flow, not on time passing.
-Every protocol prints the first number. The reason to trust the rest of this repository is
-that we printed the third one next to it.
-
-## What is real here, and what is not
-
-Being precise about this is the point of the project, so it goes first.
-
-| | |
-|---|---|
-| **Real** | The program. The two mints are the actual mainnet SPYx and USDY accounts, with their real extensions, decimals and owning programs — SPYx is Token-2022 (676 B, 8 dp), USDY is classic SPL (82 B, 6 dp). One instruction CPIs to **two different token programs**. |
-| **Replayed** | The frontend shows a *recorded* run, not live state. It says so on the page, with every transaction signature listed. |
-| **Not tested at all** | Issuance. Backed holds SPYx's mint authority and Ondo holds USDY's, so no test wallet can ever be issued either token — the fork writes balances into the accounts at genesis instead. A transfer hook that consulted issuer state would still be modelled rather than exercised. |
-
-The frontend replays rather than reading a live chain **because devnet has no
-SPYx and no USDY.** A live demo would have to model both mints, and modelling
-them is exactly what let a green test suite agree with broken code for four
-commits (see *The defect worth reading about* below). Keeping the assets real
-was worth more than keeping the data live.
-
-## Run it
-
-```sh
-# 1. the fork: clones the real mainnet mints and seeds the test wallet
-./fork/setup.sh                     # leaves a validator on 127.0.0.1:8899
-
-# 2. build and deploy (see build.sh for why it is not `anchor build`)
-./build.sh
-solana airdrop 50 --url http://127.0.0.1:8899 --keypair ~/.config/solana/id.json
-anchor deploy --provider.cluster http://127.0.0.1:8899
-
-# 3. the tests
-ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 ANCHOR_WALLET=~/.config/solana/id.json \
-  npx ts-mocha -p ./tsconfig.json -t 1000000 tests/stockpump.spec.ts   # 16 local
-ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 ANCHOR_WALLET=~/.config/solana/id.json \
-  npx ts-mocha -p ./tsconfig.json -t 1000000 tests/fork.spec.ts        # 4 on the real mints
-
-# 4. the frontend
-cd app && npm install && npm run check && npm run dev
-```
-
-⛔ **The vault PDA is a singleton per stock** — seeded on `[b"vault", SPYx]`. The
-fork suite and `scripts/record-fork.ts` each consume it, so **each needs its own
-fresh `./fork/setup.sh`.** Both fail loudly and say so rather than failing deep
-inside Anchor.
-
-### Traps that will cost you an hour otherwise
-
-- `/usr/bin/yarn` on Debian/Ubuntu is **cmdtest**, not JS yarn. Use `--package-manager npm`.
-- The machine's global solana config may point at a **relative** keypair from
-  another project. Always pass `--url` and `--keypair` explicitly.
-- `anchor build` drives `cargo-build-sbf` with the default platform-tools and
-  there is no override — `anchor build -- --tools-version vX` forwards the flag
-  to the IDL's `cargo test`, which rejects it, **while leaving a stale `.so` on
-  disk whose hash still looks plausible.** Use `./build.sh`.
+- **One market per equity:** each market isolates its stock, debt, collateral,
+  oracle, and risk settings.
+- **Liquid receipt tokens:** deposit AAPL to receive cAAPL under the issuer's
+  required transfer policy.
+- **Stock-borrow yield:** borrower interest increases the AAPL claim behind
+  cAAPL.
+- **USDC collateral:** borrowers lock USDC before they receive stock inventory.
+- **Utilization-based rates:** borrow cost and lender APY rise with demand.
+- **Collateral health:** oracle prices determine borrow limits and liquidation.
+- **Token-2022 underwriting:** Cairn checks issuer controls before it opens a
+  market.
+- **Compliance-aware receipts:** cAAPL applies compatible transfer and
+  eligibility rules.
+- **Liquidity-aware exits:** redemptions succeed only when enough equity is in
+  the vault. A withdrawal queue is planned for high utilization.
+- **Mainnet-fork tests:** local tests use cloned institutional mint state.
+- **Visible risk:** the interface reports utilization, available liquidity,
+  issuer powers, exchange rate, and losses.
 
 ## How it works
 
-Five instructions (`initialize`, `bootstrap`, `deposit`, `redeem`, `reconcile`)
-and one `Vault` account holding two sleeves.
-
-- **Deposit is in-kind, both legs.** You receive the *binding sleeve's* share
-  count — the smaller of the two ratios — so a lopsided deposit cannot mint more
-  shares than the assets justify.
-- **The fee stays in the vault.** It is not routed anywhere. That is the whole
-  ratchet.
-- **1,000 dead shares are burned at bootstrap** into the vault's own account, so
-  the supply can never return to zero and the first depositor cannot be
-  sandwiched by a donation.
-- **`reconcile` is downward-only.** An upward mark would reopen the donation
-  vector it exists to close.
-- **Redeem takes a sleeve mask.** You may take both legs or either one alone —
-  useful if the issuer has frozen one of them.
-
-⚠️ **Taking one leg still burns your shares in full.** It is not a discount and
-not a partial exit: the assets you leave behind stay in the vault and raise
-everyone else's count. The recorded run contains a real example — a `0b10`
-redeem where SPYx `held` is unchanged while 52 shares burn, so SPYx-per-share
-jumps 70,408.29 → 73,307.12. The UI shows that number rather than footnoting it.
-
-## What the issuers can still do to your assets
-
-Not fine print. Measured at the mints on 2026-09-18:
-
-- SPYx's **permanent delegate** and its **transfer-hook authority are the same
-  key**; freeze and pause are a second shared key. Six issuer powers sit under
-  four keys, so one compromised key reaches further than the extension list
-  suggests.
-- SPYx carries `ScaledUiAmountConfig`, and the live multiplier is
-  `newMultiplier`, not `multiplier` — reading the wrong field understates SPYx
-  by 0.1799%. **The vault accounts in raw base units and reads neither.**
-
-## Status, stated plainly
-
-| | |
-|---|---|
-| **Program** | Deployed and byte-verified on **devnet** at `5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY`. **Never deployed to mainnet. Has never held real money.** |
-| **Audit** | **None.** Mutation testing is not an audit — see *The defect worth reading about* below for a measured case where a clean mutation score coexisted with a broken program for four commits. |
-| **The demo** | A **recorded** run replayed from a fixture. Every signature is listed. The page says so at the top rather than in a footnote. |
-| **Untested class** | **Issuance, freeze, pause.** Backed holds SPYx's mint authority, so no test wallet can be issued the token — the fork writes balances at genesis. Those paths are modelled, never executed, and that is the failure class most likely to matter on mainnet. |
-
-## Testing
-
-| suite | result |
-|---|---|
-| local (`stockpump.spec.ts`) | 17 passing |
-| Token-2022 shape (`mint2022.spec.ts`) | 3 passing |
-| mainnet fork (`fork.spec.ts`) | 4 passing, on the real mints — **on a fresh `./fork/setup.sh`**, see the singleton note above |
-| `cargo mutants` on `lib.rs` | 18 mutants, 18 caught, 0 missed — re-run 2026-09-20 02:39–02:55, now that `lib.rs` carries `enforce_caps` and `set_deposit_cap`. The two new mutants are exactly those two functions, both caught. ⚠️ **and the score does not mean what it looks like — see below** |
-| `cargo mutants` on `math.rs` | 32 mutants, 30 caught, 2 unviable, 0 missed |
-| frontend (`cd app && npm run check`) | adapter, ratio maths and page-honesty assertions |
-
-⛔ **18/18 ON `lib.rs` CERTIFIES THE INSTRUMENT, NOT THE POPULATION.** The cap's
-whole decision is `require!(next_held[i] <= deposit_cap, …)`, and cargo-mutants
-does not mutate inside macro expansions — so it never generated `<= → <` and the
-perfect score was measured over a set that excludes the one comparison the cap
-is. Verified by hand on 2026-09-20: flip that operator, rebuild, redeploy, and
-the suite goes **16 passing / 1 failing** with only *"a deposit landing EXACTLY
-on the cap is accepted"* failing. The other three cap tests all still pass — the
-boundary had no coverage at all before that test existed, and the mutation score
-said the opposite. (Restored `.so` is byte-identical, md5 `8e3c0647…`.)
-
-⚠️ `cargo mutants` on `math.rs` needs `-- --lib`, or every mutant drags the
-TypeScript bridge through build + deploy + suite and 2 minutes becomes 5 hours.
-
-### The defect worth reading about
-
-`docs/mutation-testing.md` leads with what mutation testing *cannot* see, and
-this repo has the measured example. SPYx is Token-2022 and USDY is classic SPL,
-but the local harness built **both** mints under Token-2022 — it mirrored SPYx
-faithfully and got USDY's *program* wrong, the one property that mattered. Every
-test passed. Four commits and a clean mutation score later, the vault still
-could not have held the real asset pair.
-
-The tests were wrong in the same way the code was wrong, so they agreed, and
-**no mutant can disagree with an agreement.** Only the real mints found it.
-
-## Layout
-
+```text
+Tokenized AAPL holder
+        |
+        | deposit AAPL
+        v
+  Cairn AAPL vault  ---- mint ---->  cAAPL holder
+        |
+        | lend AAPL
+        v
+ Market maker  ---- USDC collateral ---->  Cairn market
+        |
+        | repay AAPL plus interest
+        v
+More AAPL value backs each cAAPL
 ```
-programs/stockpump/src/     the program: lib.rs, math.rs   (crate still named stockpump;
-                            the product was renamed to Cairn, the crate has not been —
-                            renaming it changes the program id, so it waits for mainnet)
-programs/stockpump/tests/   integration.rs — bridges cargo-mutants to the TS suite
-tests/                      stockpump.spec.ts (local), fork.spec.ts (real mints)
-fork/                       setup.sh — clones the mainnet mints, seeds holdings
-scripts/record-fork.ts      records one real run into the frontend's fixture
-app/                        the frontend; src/lib/source.ts is the only data boundary
-docs/                       mutation-testing.md, nasty-token-checklist.md
-CLAUDE.md                   rules for anyone (or anything) committing here
+
+1. Cairn checks the equity mint and its Token-2022 controls.
+2. The user deposits AAPL into the AAPL vault PDA.
+3. Cairn mints cAAPL at the current exchange rate.
+4. A borrower posts USDC and borrows available AAPL.
+5. Interest accrues in AAPL units and raises the cAAPL exchange rate.
+6. The holder burns cAAPL to redeem available AAPL.
+
+If borrowers use most of the vault, immediate redemption can become limited.
+The current contract rejects a redemption that exceeds available liquidity. A
+withdrawal queue or recall process is required before production.
+
+## Example holder flow
+
+This example uses illustrative numbers. It does not promise a return.
+
+1. Jerry connects an eligible wallet and opens the AAPL market.
+2. Cairn shows the issuer controls, utilization, lender APY, available AAPL,
+   and redemption status.
+3. Jerry deposits 10 AAPL when the exchange rate is 1 AAPL per cAAPL.
+4. The vault measures the received amount and mints 10 cAAPL to Jerry.
+5. A market maker posts USDC collateral and borrows part of the available AAPL.
+6. The market maker's AAPL debt accrues interest. The cAAPL exchange rate rises.
+7. Jerry can hold, transfer, or use cAAPL in an approved integration.
+8. The exchange rate later reaches 1.02 AAPL per cAAPL.
+9. Jerry burns 10 cAAPL and receives 10.2 AAPL when that liquidity is available.
+10. If liquidity is not available, Jerry waits until borrowers repay. A queue
+    is planned but not implemented.
+
+## The receipt token
+
+Each supported equity has one isolated market and one receipt token.
+
+| Deposit | Receipt | Meaning                                        |
+| ------- | ------- | ---------------------------------------------- |
+| AAPL    | cAAPL   | Claim on the managed AAPL assets in its market |
+| SPY     | cSPY    | Claim on the managed SPY assets in its market  |
+| TSLA    | cTSLA   | Claim on the managed TSLA assets in its market |
+
+The exchange rate is based on net assets, not a displayed stock price:
+
+```text
+assets = available equity + borrower debt + accrued interest - losses - reserves
+exchange rate = assets / receipt-token supply
 ```
+
+Deposits mint shares at this rate. Redemptions burn shares at this rate. Direct
+token donations must not change internal accounting.
+
+## Yield model
+
+Borrowers pay a variable rate based on utilization:
+
+```text
+utilization = borrowed AAPL / total managed AAPL
+```
+
+The rate rises as utilization rises. The UI presents this as a staircase:
+
+- Low utilization gives borrowers cheap inventory.
+- High utilization increases lender APY.
+- The final range rises sharply to protect withdrawal liquidity.
+
+The protocol can retain a stated reserve factor. The remaining interest belongs
+to cAAPL holders. Yield is zero when there is no borrowing.
+
+## Why Token-2022 needs a separate protocol
+
+Tokenized equities can use controls that normal SPL assets do not use. These
+controls can block transfers, seize vault assets, change displayed amounts, or
+execute issuer code during a transfer.
+
+Cairn uses a fail-closed underwriting gateway before it opens a market. The
+gateway records and evaluates:
+
+- Mint and freeze authorities
+- Permanent delegate
+- Transfer hook and hook authority
+- Pausable configuration
+- Transfer fees
+- Default account state
+- Mint close authority
+- Non-transferable configuration
+- Scaled UI amount configuration
+- Token-program owner and decimals
+
+The gateway returns one of three decisions:
+
+- **Accepted:** the asset matches an approved issuer policy.
+- **Restricted:** the asset needs extra accounts or transfer rules.
+- **Rejected:** Cairn cannot operate or exit safely.
+
+Extension presence alone cannot prove safety. Transfer-hook programs and issuer
+authorities need explicit allowlists. Policy changes must stop new deposits
+without blocking safe exits.
+
+### Compliance cannot stop at the vault
+
+A freely transferable cAAPL could bypass restrictions on the underlying AAPL.
+The receipt token must enforce compatible eligibility and transfer rules. Cairn
+must not create a permissionless wrapper around a restricted security.
+
+## Cairn V2 architecture
+
+Each market contains:
+
+- One Token-2022 equity mint
+- One Token-2022 receipt mint
+- One equity vault PDA
+- One USDC collateral vault PDA
+- Interest, reserve, and utilization state
+- Oracle and risk configuration
+- Borrow positions isolated by market
+
+The V2 instruction set is:
+
+| Instruction         | Purpose                                                     |
+| ------------------- | ----------------------------------------------------------- |
+| `initialize_market` | Validate a mint and create its isolated market              |
+| `deposit`           | Move measured equity into the vault and mint receipt tokens |
+| `redeem`            | Burn receipt tokens and return available equity             |
+| `borrow`            | Lock USDC collateral and transfer equity to a borrower      |
+| `repay`             | Return equity principal and interest                        |
+| `liquidate`         | Close an unsafe position and pay the liquidator             |
+| `deposit_collateral` | Lock USDC in a borrow position                              |
+| `withdraw_collateral` | Withdraw USDC while the position remains healthy           |
+| `reconcile_cash`    | Record issuer seizure or another verified asset loss         |
+| `set_market_config` | Update bounded market controls through the market authority  |
+| `set_paused`        | Stop new deposits or borrows without blocking exits          |
+
+Interest accrues inside every state-changing lending instruction. The global
+borrow index updates in constant time without iterating over borrowers.
+
+### Core invariants
+
+Agents and contributors must preserve these rules:
+
+1. Cairn mints receipt tokens only after it measures the equity received.
+2. Debt cannot increase unless the same transaction transfers equity out.
+3. Repayment credit cannot exceed the measured equity received.
+4. A redemption burns the exact claim that it pays.
+5. Direct transfers into a vault do not increase managed assets.
+6. Stale or invalid oracle data blocks borrowing and liquidation.
+7. A deposit cap never blocks repayment or redemption.
+8. Issuer seizure and bad debt reduce the exchange rate. The UI reports losses.
+9. The receipt token applies the required issuer eligibility rules.
+10. Every market isolates its assets, debt, oracle, and risk configuration.
+
+## Mainnet-fork testing
+
+Institutional equity mints do not exist on devnet. Cairn uses a local validator
+that clones real mainnet mint accounts. This tests their true owners, decimals,
+and Token-2022 extension data without using real funds.
+
+The current fork includes:
+
+- SPYx: Token-2022, 676-byte mint account, 8 decimals
+- USDY: classic SPL Token, 82-byte mint account, 6 decimals
+- Separate token programs inside one transaction
+- Recorded mint-authority and issuer-control evidence
+
+The fork does not test real issuance. It seeds balances at genesis because only
+the issuers control the live mint authorities. An active transfer-hook program
+also needs its own local execution test.
+
+## Current state
+
+The repository contains both generations so the deployed prototype remains
+reproducible.
+
+| Capability     | Legacy `stockpump` program            | Local `cairn` V2 program                         |
+| -------------- | ------------------------------------- | ------------------------------------------------ |
+| User deposit   | SPYx and USDY together                | One isolated tokenized-equity market             |
+| Receipt        | pSPY                                  | Token-2022 cEquity receipt                       |
+| Yield source   | 1% deposit and redemption fees        | Equity debt accrued through a global borrow index |
+| Borrowing      | None                                  | USDC-collateralized equity loans                 |
+| Liquidation    | None                                  | Pyth spot and TWAP health checks                 |
+| Mint screening | Closable-mint rejection and reporting | On-chain fail-closed extension policy            |
+| Testing        | Local suite and mainnet-fork fixtures | Math, property, lint, IDL, and SBF build checks  |
+
+Current facts:
+
+- Cairn V2 program ID is `EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL`.
+- V2 builds locally but has not been deployed or independently audited.
+- The new interface is an interactive model. It does not connect a wallet or
+  submit transactions.
+- Active Token-2022 transfer hooks are rejected until hook-account resolution
+  and local execution tests are implemented.
+- Collateral is restricted to classic SPL Token USDC so liquidation cannot be
+  blocked by Token-2022 hooks or mutable transfer extensions.
+- The deposit path revalidates mutable mint policy before accepting inventory.
+- A full Anchor lifecycle test against cloned institutional assets is still
+  required.
+- The legacy devnet program has never held real money.
+
+The recorded prototype produced a 0.5833% fee-only increase in SPYx per share.
+Its 1% entry fee and 1% exit fee create a 1.99% round-trip cost. These numbers
+describe the old prototype. They are not lending APY.
+
+## Build and test
+
+Requirements: Solana CLI, Anchor, Rust, Node.js, and npm.
+
+```sh
+# Start a validator with cloned mainnet mint accounts.
+./fork/setup.sh
+
+# Build the program. Do not use bare `anchor build` in this repository.
+./build.sh
+
+# Deploy to the local validator. Always pass the URL and keypair.
+anchor deploy \
+  --provider.cluster http://127.0.0.1:8899 \
+  --provider.wallet ~/.config/solana/id.json
+
+# Run the local suite.
+ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 \
+ANCHOR_WALLET=~/.config/solana/id.json \
+npx ts-mocha -p ./tsconfig.json -t 1000000 tests/stockpump.spec.ts
+
+# Restart the fork before this suite because the vault PDA is unique per stock.
+./fork/setup.sh
+ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 \
+ANCHOR_WALLET=~/.config/solana/id.json \
+npx ts-mocha -p ./tsconfig.json -t 1000000 tests/fork.spec.ts
+
+# Check the frontend.
+cd app
+npm install
+npm run check
+npm run dev
+```
+
+Important repository rules:
+
+- Use `./build.sh`. A bare `anchor build` can leave a stale program artifact.
+- `/usr/bin/yarn` is `cmdtest` on the development machine. Use npm.
+- Always give `solana` an explicit RPC URL and keypair.
+- Do not run two suites against the same validator at the same time.
+- Do not filter the sequential TypeScript suite. Earlier tests create its state.
+- Start a fresh fork before each flow that initializes the same market PDA.
+
+## Repository map
+
+```text
+programs/cairn/src/lib.rs           V2 lending instructions and account constraints
+programs/cairn/src/state.rs         isolated market, position, and risk state
+programs/cairn/src/math.rs          receipt, debt-share, rate, and liquidation math
+programs/cairn/src/oracle.rs        Pyth spot and TWAP validation
+programs/cairn/src/policy.rs        Token-2022 mint policy gate
+programs/stockpump/                 legacy deployed fee prototype
+tests/stockpump.spec.ts             local end-to-end tests
+tests/fork.spec.ts                  tests against cloned mainnet mints
+tests/mint2022.spec.ts              Token-2022 mint-shape tests
+fork/setup.sh                       local mainnet-fork setup
+scripts/record-fork.ts              recorded demo generator
+app/src/lib/issuerControls.ts       issuer-control decoder
+app/src/components/MotionUI.tsx     beUI-inspired accessible motion primitives
+app/src/components/YieldCurve.tsx   interactive utilization and lender-rate model
+docs/nasty-token-checklist.md       measured issuer and extension risks
+docs/mutation-testing.md            test-quality findings
+CLAUDE.md                           mandatory repository rules
+```
+
+## Definition of the first complete lending demo
+
+The first valid cAAPL demo must perform one complete lifecycle:
+
+1. Approve an AAPL mint through the underwriting gateway.
+2. Deposit AAPL and mint cAAPL.
+3. Post USDC collateral and borrow AAPL.
+4. Accrue interest through the utilization model.
+5. Repay principal and interest in AAPL.
+6. Burn cAAPL and withdraw more AAPL than the original claim.
+7. Show every transaction and each exchange-rate change.
+
+Until this lifecycle passes against a cloned institutional Token-2022 mint,
+Cairn is a prototype for the new design, not a working securities-lending
+market.
+
+## Security and legal scope
+
+Cairn is experimental software. Tokenized equities include issuer, market,
+oracle, liquidation, smart-contract, and regulatory risks. A receipt token does
+not remove the restrictions or legal terms of its underlying equity token.
+
+Do not use the protocol with real assets before an independent audit, defined
+issuer agreements, production oracle controls, and a reviewed compliance model.

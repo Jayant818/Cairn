@@ -1,198 +1,85 @@
 {
   "meta": {
-    "recordedAt": "2026-09-18T13:02:10.941Z",
-    "cluster": "mainnet fork (solana-test-validator --clone)",
-    "programId": "5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY",
-    "feeBps": 100,
-    "sleeves": [
-      {
-        "symbol": "SPYx",
-        "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
-        "decimals": 8,
-        "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-        "role": "stock"
-      },
-      {
-        "symbol": "USDY",
-        "mint": "A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6",
-        "decimals": 6,
-        "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-        "role": "cash"
-      }
-    ],
-    "shareMint": "C1pKTtFBQinwsFKM4wseo2FT96F2Jv7ajaEub36XNiZe",
+    "recordedAt": "2026-09-22T01:33:01.000Z",
+    "cluster": "isolated mainnet mint fork",
+    "programId": "EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL",
+    "market": "SPYx / USDC",
+    "equityMint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "receiptSymbol": "cSPYx",
+    "collateralMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     "caveats": [
-      "Recorded from a mainnet fork. Not live state.",
-      "The MINTS are the real mainnet accounts, with their real extensions, decimals and owning programs.",
-      "The BALANCES were written into the fork's token accounts at genesis — Backed holds SPYx's mint authority and Ondo holds USDY's, so nothing here exercises issuance."
+      "Recorded from a local validator that cloned the real 676-byte SPYx mint account.",
+      "SPYx and USDC balances were seeded at genesis because their live mint authorities are external.",
+      "The short local clock interval proves accrual but produces a smaller exchange-rate change than a production term."
     ]
   },
-  "steps": [
+  "events": [
     {
       "seq": 0,
       "kind": "initialize",
-      "label": "vault opened, fee 100 bps",
-      "signature": "2FDTZxbRPJmNNVpaPm1HNPABH1wHt8wK6ccNBG5BBvJikmvf8vdepZHYLhxqDtSpEtQcJSEwhWModErvVdgXoYKi",
-      "slot": 141,
-      "blockTime": 1789736525,
-      "held": [
-        "0",
-        "0"
-      ],
-      "shareSupply": "0",
-      "userSleeves": [
-        "1000000000",
-        "1000000000"
-      ],
-      "userShares": "0"
+      "actor": "49ALNspWUXwNXyAepH3DQjdkEdfRtSxS4nJCo8BhaL3s",
+      "message": "SPYx market initialized with USDC collateral",
+      "signature": "2DSwSsSk3qjufLA1ksgnirfvL5VwLxbyaCszr9Dk4uJe2SFMzzCbkWCfBeXn43xzqhRFZ1nYsrYszjDqAPt6BdFD",
+      "slot": 2014,
+      "blockTime": 1790026364,
+      "exchangeRate": 1
     },
     {
       "seq": 1,
-      "kind": "bootstrap",
-      "label": "0.7 SPYx + 30 USDY seeded",
-      "signature": "4gmrXoKTAYK2nrev1GrGnGsnm2BheiouJWfd1xHi52qNomrwihDeu3BYr8D2L3nyjgJAEsxxb79Z1xKq5gybXWsC",
-      "slot": 146,
-      "blockTime": 1789736527,
-      "held": [
-        "70000000",
-        "30000000"
-      ],
-      "shareSupply": "1000",
-      "userSleeves": [
-        "930000000",
-        "970000000"
-      ],
-      "userShares": "0"
+      "kind": "deposit",
+      "actor": "49ALNspWUXwNXyAepH3DQjdkEdfRtSxS4nJCo8BhaL3s",
+      "message": "Wallet 49AL... deposited 10.0 SPYx -> received 10.0 cSPYx",
+      "signature": "4aquJrCY3Th5qZUhuPmcB1MAKptTGYKeomdvQyxym2tfUPBExDKg6n1eUDd9n9aFebSsuk17Tk5bgPCJcEDQtePt",
+      "slot": 2020,
+      "blockTime": 1790026366,
+      "equityAmount": 10,
+      "receiptAmount": 10,
+      "exchangeRate": 1
     },
     {
       "seq": 2,
-      "kind": "deposit",
-      "label": "0.07 SPYx + 3 USDY",
-      "signature": "4s2JLakywwSYAxsig7wayXae3iawVDjStFzcKUCU8py4rWYmCWDRxbEScg3hXyc3C61tiy1e72Nde2LNCe3iDsGh",
-      "slot": 147,
-      "blockTime": 1789736527,
-      "held": [
-        "77000000",
-        "33000000"
-      ],
-      "shareSupply": "1099",
-      "userSleeves": [
-        "923000000",
-        "967000000"
-      ],
-      "userShares": "99"
+      "kind": "borrow",
+      "actor": "eo9SQkuoHvXECy2Qsw4n2b2tWYpfqQp8kAFgSMwLc28",
+      "message": "MM eo9S... locked 3,000 USDC -> borrowed 5.0 SPYx",
+      "signature": "2R5bJkd7eMmdC7oVySLAc6Yo85nncDNo2fvhrGSioqgJrnp8wnAw54tbSD4Cyj1tTyE3ykj5BRUh9D3qdQUjgwYG",
+      "slot": 2023,
+      "blockTime": 1790026368,
+      "equityAmount": 5,
+      "collateralAmount": 3000,
+      "exchangeRate": 1
     },
     {
       "seq": 3,
-      "kind": "deposit",
-      "label": "0.025 SPYx + 1.1 USDY",
-      "signature": "4RhfcDMajKyMu9mU1yJcVQhXj9AJfzxo5AZyU3fCoyj6GJydUFjVK7Wk32wKT4BmdCvG1Vd8uF1SniGq9qzutuJD",
-      "slot": 148,
-      "blockTime": 1789736528,
-      "held": [
-        "79500000",
-        "34100000"
-      ],
-      "shareSupply": "1134",
-      "userSleeves": [
-        "920500000",
-        "965900000"
-      ],
-      "userShares": "134"
+      "kind": "accrue",
+      "actor": "EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL",
+      "message": "Interest accrued -> cSPYx exchange rate updated to 1.00000014",
+      "signature": "4qEf5nrMF7HTwp7idgFaJoyCXLd9FVSuDttJLx8YhktnkiK7Vw4tCJdN1HNekKHy42T1a8WPTHVirnGqDn599Qrq",
+      "slot": 2029,
+      "blockTime": 1790026370,
+      "exchangeRate": 1.00000014
     },
     {
       "seq": 4,
-      "kind": "deposit",
-      "label": "0.14 SPYx + 6 USDY",
-      "signature": "5b7dkzukUh1LJL3fCkQ6yyw8MGEu74fXoD5s7gWM2kp8vLCjmw82EYZ8n2uhg36fM1MoBStQYq1PasRv7J9p9Szf",
-      "slot": 149,
-      "blockTime": 1789736528,
-      "held": [
-        "93500000",
-        "40100000"
-      ],
-      "shareSupply": "1331",
-      "userSleeves": [
-        "906500000",
-        "959900000"
-      ],
-      "userShares": "331"
+      "kind": "repay",
+      "actor": "eo9SQkuoHvXECy2Qsw4n2b2tWYpfqQp8kAFgSMwLc28",
+      "message": "MM eo9S... repaid 5.00000159 SPYx",
+      "signature": "63J6WWZoayUPX3MzFBUMtckPrXehaRFnHCm7L4jj8TNzQ9WNEg4rnKi3MHaEYD72LgZzrFRht1sUGhZyymhYEjr8",
+      "slot": 2030,
+      "blockTime": 1790026370,
+      "equityAmount": 5.00000159,
+      "exchangeRate": 1.00000014
     },
     {
       "seq": 5,
-      "kind": "deposit",
-      "label": "0.009 SPYx + 0.4 USDY",
-      "signature": "26sXWtw4jgpK8ufGp7wvXiPRuH9fvTR57y4LHdfFSEjQiW4ER6u6k579shNg1V4dzmnwc8vhC4LYGzXovZ8LDGzP",
-      "slot": 150,
-      "blockTime": 1789736528,
-      "held": [
-        "94400000",
-        "40500000"
-      ],
-      "shareSupply": "1343",
-      "userSleeves": [
-        "905600000",
-        "959500000"
-      ],
-      "userShares": "343"
-    },
-    {
-      "seq": 6,
-      "kind": "deposit",
-      "label": "0.055 SPYx + 2.4 USDY",
-      "signature": "52KbbvjueNEmMZacmtFjpSXKPmgsP2ex4VU1xtYAbeN3HZ7a6i8CYqJGCWhCVMWnQpcEWmm4aLGEW4Fs4bi5GeGo",
-      "slot": 151,
-      "blockTime": 1789736529,
-      "held": [
-        "99900000",
-        "42900000"
-      ],
-      "shareSupply": "1420",
-      "userSleeves": [
-        "900100000",
-        "957100000"
-      ],
-      "userShares": "420"
-    },
-    {
-      "seq": 7,
       "kind": "redeem",
-      "label": "both legs",
-      "signature": "5VE5QPmPN7F3YhTqsioSrUh1ho6GDvp5vpKpfKGCfWup9m5aUCeSkYCLfze9ppWGZuyDBQbzCnRR8a5VEoChN2w2",
-      "slot": 152,
-      "blockTime": 1789736529,
-      "held": [
-        "92586898",
-        "39759539"
-      ],
-      "shareSupply": "1315",
-      "userSleeves": [
-        "907413102",
-        "960240461"
-      ],
-      "userShares": "315",
-      "sleeveMask": 3,
-      "sharesBurned": "105"
-    },
-    {
-      "seq": 8,
-      "kind": "redeem",
-      "label": "cash leg only — shares still burn in full",
-      "signature": "3oHXeDoAYKNmA6M6eFo4Hy5utg2n3LSCh9Cs4ztkJwbu6BNAAFud19589TWpKzdTCFCDwKwPaKY6wGrZEPJqhe9k",
-      "slot": 153,
-      "blockTime": 1789736530,
-      "held": [
-        "92586898",
-        "38203022"
-      ],
-      "shareSupply": "1263",
-      "userSleeves": [
-        "907413102",
-        "961796978"
-      ],
-      "userShares": "263",
-      "sleeveMask": 2,
-      "sharesBurned": "52"
+      "actor": "49ALNspWUXwNXyAepH3DQjdkEdfRtSxS4nJCo8BhaL3s",
+      "message": "Wallet 49AL... burned 10.0 cSPYx -> withdrew 10.00000144 SPYx",
+      "signature": "3dhQ9SKe2JgMGUX9uTjgL8dSdZnXTKQ5TXCYKiSUP6tv6tn8DRGT51EL7SDaaj5p7NfQzYc6CQiu4BENcambU9BD",
+      "slot": 2031,
+      "blockTime": 1790026371,
+      "equityAmount": 10.00000144,
+      "receiptAmount": 10,
+      "exchangeRate": 1.00000014
     }
   ]
 }

@@ -8,7 +8,9 @@
       "role": "stock",
       "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
       "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "accountSize": 676,
       "decimals": 8,
+      "activeTransferHook": false,
       "mintAuthority": "7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj",
       "freeze": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs",
       "seize": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
@@ -24,19 +26,6 @@
         "transferHook",
         "tokenMetadata"
       ]
-    },
-    {
-      "symbol": "USDY",
-      "role": "cash",
-      "mint": "A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6",
-      "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "decimals": 6,
-      "mintAuthority": "8n2uiRUd1A9NN78PKESkJe6k6zMqtKCZh3MrK1j9qkB1",
-      "freeze": "51QVCuHfL1FeNjd8BDeffCKhCcAYoULnVB3yjNhShiuK",
-      "seize": null,
-      "pause": null,
-      "scaledUiAmount": null,
-      "extensions": []
     }
   ]
 }

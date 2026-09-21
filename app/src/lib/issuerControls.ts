@@ -20,6 +20,10 @@ export type MintControls = {
   symbol: string;
   mint: string;
   role: string;
+  tokenProgram: string;
+  accountSize: number;
+  decimals: number;
+  activeTransferHook: boolean;
   mintAuthority: string | null;
   seize: string | null;
   freeze: string | null;

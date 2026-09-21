@@ -10,10 +10,6 @@
 // ⭐ THE FIX IS NOT A BETTER SENTENCE, IT IS REMOVING THE AUTHOR FROM THE LOOP: record the
 // authorities, derive the sentence, and let the selfcheck fail when the two disagree.
 //
-// ⚠️ Separate from record-fork.ts ON PURPOSE. That script replays nine transactions and its
-// singleton vault PDA makes it once-per-ledger; this is two reads and must stay re-runnable
-// against any cluster that carries the real mints.
-//
 // Zero dependencies — `jsonParsed` makes the RPC decode the Token-2022 extensions, exactly
 // as app/src/lib/upgradeAuthority.ts does, so nothing here needs web3.js or spl-token.
 import { writeFileSync } from "node:fs";
@@ -21,9 +17,8 @@ import { writeFileSync } from "node:fs";
 const RPC = process.argv[2] ?? "http://127.0.0.1:8899";
 const OUT = new URL("../app/src/data/mint-controls.json", import.meta.url);
 
-const SLEEVES = [
+const MINTS = [
   { symbol: "SPYx", mint: "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W", role: "stock" },
-  { symbol: "USDY", mint: "A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6", role: "cash" },
 ];
 
 async function rpc(method, params) {
@@ -38,13 +33,14 @@ async function rpc(method, params) {
 }
 
 const mints = [];
-for (const s of SLEEVES) {
+for (const s of MINTS) {
   const v = (await rpc("getAccountInfo", [s.mint, { encoding: "jsonParsed" }]))?.value;
   if (!v) throw new Error(`${s.symbol}: mint ${s.mint} not found on ${RPC}`);
   if (v.data?.parsed?.type !== "mint") throw new Error(`${s.symbol}: not a mint account`);
   const info = v.data.parsed.info;
   const ext = (name) =>
     (info.extensions ?? []).find((e) => e.extension === name)?.state ?? null;
+  const transferHookProgram = ext("transferHook")?.programId ?? null;
 
   // ⛔ null means the chain says THE POWER DOES NOT EXIST, which is a stronger statement
   // than "we did not look". Anything we could not decode must throw above, never land here
@@ -54,7 +50,11 @@ for (const s of SLEEVES) {
     role: s.role,
     mint: s.mint,
     tokenProgram: v.owner,
+    accountSize: v.space,
     decimals: info.decimals,
+    activeTransferHook: Boolean(
+      transferHookProgram && transferHookProgram !== "11111111111111111111111111111111",
+    ),
     mintAuthority: info.mintAuthority ?? null,
     freeze: info.freezeAuthority ?? null,
     seize: ext("permanentDelegate")?.delegate ?? null,

@@ -9,6 +9,7 @@ mutants.out*/
 fork-ledger/
 fork/*-ata.json
 fork/atas.json
+fork/generated/
 
 # frontend
 app/node_modules

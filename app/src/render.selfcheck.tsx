@@ -22,7 +22,7 @@ must("No borrower loops.", "constant-time accounting claim");
 must("Preview only. No wallet transaction is created.", "transaction preview disclosure");
 must("Local build verified. Not deployed.", "deployment status");
 
-if (/stockpump/i.test(plain)) throw new Error("legacy product name is visible");
+if (/stockpump/i.test(plain)) throw new Error("retired product name is visible");
 if (!motionSource.includes('from "motion/react"')) throw new Error("motion components lost Motion");
 if (!motionSource.includes("useReducedMotion")) throw new Error("motion lacks reduced-motion handling");
 if (!css.includes("prefers-reduced-motion")) throw new Error("CSS lacks reduced-motion fallback");

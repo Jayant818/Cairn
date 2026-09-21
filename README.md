@@ -10,12 +10,8 @@ AAPL claim behind each cAAPL.
 
 > Deposit AAPL. Receive cAAPL. Earn stock-borrow yield while cAAPL stays liquid.
 
-[Legacy interface](https://stockpump-one.vercel.app) |
-[Legacy devnet program](https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet)
-
 > [!IMPORTANT]
-> Cairn V2 is implemented and builds locally. It is not deployed. The public
-> devnet address still runs the earlier two-asset fee prototype. See
+> Cairn is implemented and builds locally. It is not deployed. See
 > [Current state](#current-state).
 
 ## What Cairn does
@@ -235,23 +231,20 @@ also needs its own local execution test.
 
 ## Current state
 
-The repository contains both generations so the deployed prototype remains
-reproducible.
-
-| Capability     | Legacy `stockpump` program            | Local `cairn` V2 program                         |
-| -------------- | ------------------------------------- | ------------------------------------------------ |
-| User deposit   | SPYx and USDY together                | One isolated tokenized-equity market             |
-| Receipt        | pSPY                                  | Token-2022 cEquity receipt                       |
-| Yield source   | 1% deposit and redemption fees        | Equity debt accrued through a global borrow index |
-| Borrowing      | None                                  | USDC-collateralized equity loans                 |
-| Liquidation    | None                                  | Pyth spot and TWAP health checks                 |
-| Mint screening | Closable-mint rejection and reporting | On-chain fail-closed extension policy            |
-| Testing        | Local suite and mainnet-fork fixtures | Math, property, lint, IDL, and SBF build checks  |
+| Capability     | Current implementation                                  |
+| -------------- | ------------------------------------------------------- |
+| User deposit   | One isolated tokenized-equity market                    |
+| Receipt        | Token-2022 cEquity receipt                              |
+| Yield source   | Equity debt accrued through a global borrow index       |
+| Borrowing      | USDC-collateralized equity loans                        |
+| Liquidation    | Pyth spot and TWAP health checks                        |
+| Mint screening | On-chain fail-closed extension policy                   |
+| Testing        | Math, property, lint, IDL, and SBF build checks         |
 
 Current facts:
 
-- Cairn V2 program ID is `EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL`.
-- V2 builds locally but has not been deployed or independently audited.
+- Cairn program ID is `EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL`.
+- Cairn builds locally but has not been deployed or independently audited.
 - The new interface is an interactive model. It does not connect a wallet or
   submit transactions.
 - Active Token-2022 transfer hooks are rejected until hook-account resolution
@@ -261,43 +254,24 @@ Current facts:
 - The deposit path revalidates mutable mint policy before accepting inventory.
 - A full Anchor lifecycle test against cloned institutional assets is still
   required.
-- The legacy devnet program has never held real money.
-
-The recorded prototype produced a 0.5833% fee-only increase in SPYx per share.
-Its 1% entry fee and 1% exit fee create a 1.99% round-trip cost. These numbers
-describe the old prototype. They are not lending APY.
 
 ## Build and test
 
 Requirements: Solana CLI, Anchor, Rust, Node.js, and npm.
 
 ```sh
-# Start a validator with cloned mainnet mint accounts.
-./fork/setup.sh
-
 # Build the program. Do not use bare `anchor build` in this repository.
 ./build.sh
 
-# Deploy to the local validator. Always pass the URL and keypair.
-anchor deploy \
-  --provider.cluster http://127.0.0.1:8899 \
-  --provider.wallet ~/.config/solana/id.json
-
-# Run the local suite.
-ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 \
-ANCHOR_WALLET=~/.config/solana/id.json \
-npx ts-mocha -p ./tsconfig.json -t 1000000 tests/stockpump.spec.ts
-
-# Restart the fork before this suite because the vault PDA is unique per stock.
-./fork/setup.sh
-ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 \
-ANCHOR_WALLET=~/.config/solana/id.json \
-npx ts-mocha -p ./tsconfig.json -t 1000000 tests/fork.spec.ts
+# Run protocol tests and lint.
+cargo test -p cairn --lib
+cargo clippy -p cairn --all-targets -- -D warnings
 
 # Check the frontend.
 cd app
-npm install
+npm ci
 npm run check
+npm run build
 npm run dev
 ```
 
@@ -306,9 +280,6 @@ Important repository rules:
 - Use `./build.sh`. A bare `anchor build` can leave a stale program artifact.
 - `/usr/bin/yarn` is `cmdtest` on the development machine. Use npm.
 - Always give `solana` an explicit RPC URL and keypair.
-- Do not run two suites against the same validator at the same time.
-- Do not filter the sequential TypeScript suite. Earlier tests create its state.
-- Start a fresh fork before each flow that initializes the same market PDA.
 
 ## Repository map
 
@@ -318,12 +289,7 @@ programs/cairn/src/state.rs         isolated market, position, and risk state
 programs/cairn/src/math.rs          receipt, debt-share, rate, and liquidation math
 programs/cairn/src/oracle.rs        Pyth spot and TWAP validation
 programs/cairn/src/policy.rs        Token-2022 mint policy gate
-programs/stockpump/                 legacy deployed fee prototype
-tests/stockpump.spec.ts             local end-to-end tests
-tests/fork.spec.ts                  tests against cloned mainnet mints
-tests/mint2022.spec.ts              Token-2022 mint-shape tests
 fork/setup.sh                       local mainnet-fork setup
-scripts/record-fork.ts              recorded demo generator
 app/src/lib/issuerControls.ts       issuer-control decoder
 app/src/components/MotionUI.tsx     beUI-inspired accessible motion primitives
 app/src/components/YieldCurve.tsx   interactive utilization and lender-rate model
@@ -345,8 +311,7 @@ The first valid cAAPL demo must perform one complete lifecycle:
 7. Show every transaction and each exchange-rate change.
 
 Until this lifecycle passes against a cloned institutional Token-2022 mint,
-Cairn is a prototype for the new design, not a working securities-lending
-market.
+Cairn is pre-production software, not a working securities-lending market.
 
 ## Security and legal scope
 

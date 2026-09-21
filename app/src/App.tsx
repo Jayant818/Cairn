@@ -9,9 +9,6 @@ import {
 } from "./components/MotionUI";
 import { lenderApy, YieldCurve } from "./components/YieldCurve";
 
-const LEGACY_EXPLORER =
-  "https://explorer.solana.com/address/5RaETrSZ72bt6ym5im8ioHLoHKRP39PKzELcFJY9JgXY?cluster=devnet";
-
 const EXCHANGE_RATE = 1.0184;
 type Action = "Lend" | "Borrow";
 
@@ -60,9 +57,6 @@ export default function App() {
           <a href="#risk">Risk gate</a>
           <a href="#architecture">Architecture</a>
         </div>
-        <a className="nav-legacy" href={LEGACY_EXPLORER} target="_blank" rel="noreferrer">
-          Legacy devnet program ↗
-        </a>
       </nav>
 
       <section className="shell hero" id="top">

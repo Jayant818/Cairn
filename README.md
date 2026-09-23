@@ -10,9 +10,39 @@ cSPYx.
 
 > Deposit SPYx. Receive cSPYx. Earn stock-borrow yield while cSPYx stays liquid.
 
+**Try it:** [stockpump-one.vercel.app](https://stockpump-one.vercel.app) — paper trading, no wallet needed.
+**Demo video:** coming soon. <!-- TODO(Jayant): add the demo video link here and in app/src/lib/links.ts -->
+
 > [!IMPORTANT]
-> Cairn is implemented and builds locally. It is not deployed. See
-> [Current state](#current-state).
+> Cairn is implemented and verified on a local mainnet-mint fork. The program is
+> not on devnet or mainnet yet. See [Current state](#current-state).
+
+## Try it (paper trading)
+
+Open [stockpump-one.vercel.app](https://stockpump-one.vercel.app). The page
+opens in **paper mode**. You need no wallet, no RPC, and no funds.
+
+- Paper mode runs the SPYx market in your browser. It uses a bigint port of
+  `programs/cairn/src/math.rs` (`app/src/lib/cairnMath.ts`). Each action follows
+  its instruction in `lib.rs`: accrue first, then the same checks, then the same
+  state updates.
+- `app/src/lib/paper.selfcheck.ts` replays the Rust unit-test vectors and
+  rounding cases against the port. It fails if a floor or ceil drifts.
+- You start with 25 SPYx and 10,000 USDC in a paper wallet. The market opens with
+  fixture history: 1,000 SPYx deposited, 600 SPYx borrowed, and 30 days of
+  accrued interest. Prices are the fork fixture prices (SPYx 200.00, USDC 1.00).
+- The ribbon at the top shows the full lifecycle: deposit, post USDC, borrow,
+  let 30 days pass, repay, and redeem. **+1 day** and **+30 days** move the paper
+  clock and run the `accrue_interest` crank. **Reset** starts a fresh market.
+- The program's errors appear as the program reports them. Examples: a borrow
+  above the loan-to-value limit fails with `UnhealthyPosition`, and a redemption
+  above idle cash fails with `InsufficientLiquidity`.
+- **Found a problem?** opens a prefilled GitHub issue with the page state.
+
+Every screen shows the **PAPER — simulated, no real funds** badge. When the page
+runs on `localhost` and a Cairn market answers on the configured RPC, it
+switches to live mode, and your wallet signs the transactions. Use `?mode=paper`
+or `?mode=live` to choose a mode.
 
 ## What Cairn does
 
@@ -247,10 +277,11 @@ evaluation:
 4. **Interest and exit:** calls the permissionless `accrue_interest` crank,
    repays borrower debt, then burns cSPYx through `redeem`.
 
-The interface clearly separates chain state from the 30-day scenario projection.
-Solana's clock is authoritative on-chain; the browser does not forge a future
-timestamp. When disconnected, the UI falls back to the recorded fork lifecycle
-in `app/src/data/fork-run.json`.
+In live mode every number on the page comes from the market, position, and
+token accounts on the fork. The page uses the same `viewOf()` derivation as
+paper mode. Solana's clock is authoritative on-chain, so live mode has no time
+controls. The recorded fork lifecycle in `app/src/data/fork-run.json` is always
+shown as on-chain evidence.
 
 ## Current state
 
@@ -295,7 +326,10 @@ cargo clippy -p cairn --all-targets -- -D warnings
 # Terminal 1: run the isolated fork.
 CAIRN_LEDGER=/tmp/cairn-lifecycle-ledger ./fork/setup.sh
 
-# Terminal 2: deploy the current program and start the local fixture faucet.
+# Terminal 2: fund the deployer, deploy the program, and start the local faucet.
+# The fork does not fund your wallet. Airdrop first, or the deploy fails with
+# "insufficient funds".
+solana airdrop 100 --url http://127.0.0.1:8899 --keypair ~/.config/solana/id.json
 anchor deploy --provider.cluster localnet
 npm run faucet
 
@@ -303,7 +337,15 @@ npm run faucet
 ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 \
   npx ts-mocha -p ./tsconfig.json -t 1000000 tests/cairn.spec.ts
 
-# Terminal 3: check and run the wallet-enabled frontend.
+# The spec also creates the SPYx market. Run it before you use live mode:
+# live mode needs the market account.
+#
+# Do the fork steps in one sitting. The oracle fixtures are stamped when
+# setup.sh runs, and the market accepts prices up to 3,600 seconds old. After
+# one hour, borrow fails with InvalidOraclePrice, and so does a collateral
+# withdrawal while debt is open. Restart setup.sh.
+
+# Terminal 3: check and run the frontend (live mode on localhost).
 cd app
 npm ci
 npm run check
@@ -331,9 +373,14 @@ tests/cairn.spec.ts                 complete SPYx lending lifecycle
 app/src/lib/issuerControls.ts       issuer-control decoder
 app/src/lib/anchorClient.ts         typed Anchor provider and PDA helpers
 app/src/lib/transactions.ts         Token-2022-aware transaction dispatch
-app/src/components/SandboxRibbon.tsx guided live protocol walkthrough
+app/src/lib/cairnMath.ts            bigint port of math.rs, shared by paper and live views
+app/src/lib/paperMarket.ts          in-browser paper market that follows lib.rs
+app/src/lib/paper.selfcheck.ts      Rust-vector and rounding parity checks for the port
+app/src/lib/liveMarket.ts           reads market, position, and balances from a fork
+app/src/hooks/useCairn.ts           paper/live mode selection and actions
+app/src/components/SandboxRibbon.tsx mode badge, guided lifecycle, and time controls
 app/src/components/MotionUI.tsx     beUI-inspired accessible motion primitives
-app/src/components/YieldCurve.tsx   interactive utilization and lender-rate model
+app/src/components/YieldCurve.tsx   rate curve from borrow_rate_bps and the market config
 docs/nasty-token-checklist.md       measured issuer and extension risks
 docs/mutation-testing.md            test-quality findings
 CLAUDE.md                           mandatory repository rules
@@ -354,6 +401,61 @@ The verified local cSPYx demo performs one complete lifecycle:
 This lifecycle now passes against the cloned 676-byte SPYx Token-2022 mint.
 Cairn remains pre-production until deployment, audit, and live oracle and issuer
 integrations are complete.
+
+## Next steps after the hackathon
+
+Cairn runs its complete SPYx lending lifecycle on a local mainnet-mint fork.
+These steps move it from a verified local build to a protocol that real
+holders can use.
+
+### 1. Public deployment
+
+- Deploy the V2 program to devnet and publish the explorer link.
+- Create a devnet test market with a Token-2022 mint that copies the SPYx
+  extension set, because the real SPYx mint does not exist on devnet.
+- Connect the market to Pyth price updates on devnet instead of genesis
+  fixtures.
+- Let the interface read market, position, and exchange-rate state from the
+  chain, so every number on the page comes from an account.
+
+### 2. Liquidity and exits
+
+- Add a withdrawal queue. Today a redemption that exceeds available SPYx
+  fails. A queue lets holders wait for repayment in order.
+- Add a recall process so that the market can ask borrowers to return stock
+  when utilization stays high.
+- Run a keeper for `accrue_interest` and for liquidations, and publish its
+  source.
+
+### 3. Issuer integration
+
+- Support active Token-2022 transfer hooks. This needs hook-account
+  resolution and local execution tests for each supported issuer.
+- Agree on terms with equity issuers for permanent-delegate and freeze
+  behavior, so cSPYx mirrors issuer controls by contract as well as by code.
+- Define the eligibility model for cSPYx holders with the issuer's compliance
+  rules.
+
+### 4. More markets
+
+- Open isolated markets for more tokenized equities, for example SPY and TSLA.
+  Each market keeps its own oracle, risk settings, and receipt token.
+- Publish the per-market risk parameters and the reason for each value.
+
+### 5. DeFi integrations
+
+- Make cSPYx usable as collateral in other Solana lending markets.
+- Add cSPYx liquidity pools, so holders can exit without waiting for
+  redemption.
+
+### 6. Security before mainnet
+
+- Get an independent audit of the program and the mint policy gate.
+- Extend mutation testing from the math module to every instruction.
+- Set the program upgrade authority to a multisig and document the upgrade
+  process.
+- Launch on mainnet with deposit caps, and raise the caps only after the
+  audit and a period of stable operation.
 
 ## Security and legal scope
 

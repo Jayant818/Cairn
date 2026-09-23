@@ -17,5 +17,8 @@ TOOLS="${SBF_TOOLS_VERSION:-v1.55}"
 cd "$(dirname "$0")"
 cargo-build-sbf --tools-version "$TOOLS" --manifest-path programs/cairn/Cargo.toml
 anchor idl build -p cairn -o target/idl/cairn.json
+mkdir -p app/src/idl
+cp target/idl/cairn.json app/src/idl/cairn.json
+anchor idl type target/idl/cairn.json -o app/src/idl/cairn.ts
 echo "built on platform-tools $TOOLS"
 readelf -h target/deploy/cairn.so | grep -E "Flags"

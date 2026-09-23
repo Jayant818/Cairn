@@ -8,12 +8,21 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check": "tsx src/lib/source.selfcheck.ts && tsx src/lib/upgradeAuthority.selfcheck.ts && tsx src/lib/issuerControls.selfcheck.ts && tsx --tsconfig tsconfig.app.json src/render.selfcheck.tsx"
+    "check": "tsx src/lib/source.selfcheck.ts && tsx src/lib/upgradeAuthority.selfcheck.ts && tsx src/lib/issuerControls.selfcheck.ts && tsx src/lib/connector.selfcheck.ts && tsx --tsconfig tsconfig.app.json src/render.selfcheck.tsx"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@fontsource-variable/archivo": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/wallet-adapter-base": "^0.9.28",
+    "@solana/wallet-adapter-phantom": "^0.9.30",
+    "@solana/wallet-adapter-react": "^0.15.40",
+    "@solana/wallet-adapter-react-ui": "^0.9.40",
+    "@solana/wallet-adapter-solflare": "^0.6.34",
+    "@solana/web3.js": "^1.99.0",
+    "buffer": "^6.0.3",
     "motion": "^13.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

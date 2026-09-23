@@ -16,6 +16,8 @@ export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 TOOLS="${SBF_TOOLS_VERSION:-v1.55}"
 cd "$(dirname "$0")"
 cargo-build-sbf --tools-version "$TOOLS" --manifest-path programs/cairn/Cargo.toml
+# A fresh clone has no target/idl, and `anchor idl build -o` does not create it.
+mkdir -p target/idl
 anchor idl build -p cairn -o target/idl/cairn.json
 mkdir -p app/src/idl
 cp target/idl/cairn.json app/src/idl/cairn.json

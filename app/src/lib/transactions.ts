@@ -99,22 +99,9 @@ export async function executeDeposit(
   ]).rpc();
 }
 
-export async function executeBorrow(
-  program: Program<Cairn>,
-  wallet: PublicKey,
-  equityAmount: string | number,
-  collateralAmount: string | number,
-) {
+async function ensurePosition(program: Program<Cairn>, market: PublicKey, wallet: PublicKey) {
   const provider = program.provider as AnchorProvider;
-  const { market, state } = await marketState(program);
   const position = getPositionPda(market, wallet);
-  const borrowerEquity = getAssociatedTokenAddressSync(
-    state.equityMint, wallet, false, TOKEN_2022_PROGRAM_ID,
-  );
-  const ownerCollateral = getAssociatedTokenAddressSync(
-    state.collateralMint, wallet, false, TOKEN_PROGRAM_ID,
-  );
-  const oracles = await oracleAccounts();
   if (!(await provider.connection.getAccountInfo(position))) {
     await program.methods.initializePosition().accountsStrict({
       owner: wallet,
@@ -123,15 +110,58 @@ export async function executeBorrow(
       systemProgram: SystemProgram.programId,
     }).rpc();
   }
-  await program.methods.depositCollateral(rawAmount(collateralAmount, 6)).accountsStrict({
+  return position;
+}
+
+export async function executeDepositCollateral(
+  program: Program<Cairn>,
+  wallet: PublicKey,
+  collateralAmount: string | number,
+) {
+  const { market, state } = await marketState(program);
+  const position = await ensurePosition(program, market, wallet);
+  return program.methods.depositCollateral(rawAmount(collateralAmount, 6)).accountsStrict({
     owner: wallet,
     market,
     position,
     collateralMint: state.collateralMint,
     collateralVault: getCollateralVaultAddress(market, state.collateralMint),
-    ownerCollateral,
+    ownerCollateral: getAssociatedTokenAddressSync(state.collateralMint, wallet, false, TOKEN_PROGRAM_ID),
     collateralTokenProgram: TOKEN_PROGRAM_ID,
   }).rpc();
+}
+
+export async function executeWithdrawCollateral(
+  program: Program<Cairn>,
+  wallet: PublicKey,
+  collateralAmount: string | number,
+) {
+  const { market, state } = await marketState(program);
+  const oracles = await oracleAccounts();
+  return program.methods.withdrawCollateral(rawAmount(collateralAmount, 6)).accountsStrict({
+    owner: wallet,
+    market,
+    position: getPositionPda(market, wallet),
+    equityMint: state.equityMint,
+    collateralMint: state.collateralMint,
+    collateralVault: getCollateralVaultAddress(market, state.collateralMint),
+    ownerCollateral: getAssociatedTokenAddressSync(state.collateralMint, wallet, false, TOKEN_PROGRAM_ID),
+    ...oracles,
+    collateralTokenProgram: TOKEN_PROGRAM_ID,
+  }).rpc();
+}
+
+export async function executeBorrow(
+  program: Program<Cairn>,
+  wallet: PublicKey,
+  equityAmount: string | number,
+) {
+  const { market, state } = await marketState(program);
+  const position = await ensurePosition(program, market, wallet);
+  const borrowerEquity = getAssociatedTokenAddressSync(
+    state.equityMint, wallet, false, TOKEN_2022_PROGRAM_ID,
+  );
+  const oracles = await oracleAccounts();
   return program.methods.borrow(rawAmount(equityAmount, 8)).accountsStrict({
     borrower: wallet,
     market,
@@ -147,6 +177,23 @@ export async function executeBorrow(
       wallet, borrowerEquity, wallet, state.equityMint, TOKEN_2022_PROGRAM_ID,
     ),
   ]).rpc();
+}
+
+export async function executeRepay(
+  program: Program<Cairn>,
+  wallet: PublicKey,
+  equityAmount: string | number,
+) {
+  const { market, state } = await marketState(program);
+  return program.methods.repay(rawAmount(equityAmount, 8)).accountsStrict({
+    payer: wallet,
+    market,
+    position: getPositionPda(market, wallet),
+    equityMint: state.equityMint,
+    equityVault: getEquityVaultAddress(market, state.equityMint),
+    payerEquity: getAssociatedTokenAddressSync(state.equityMint, wallet, false, TOKEN_2022_PROGRAM_ID),
+    equityTokenProgram: TOKEN_2022_PROGRAM_ID,
+  }).rpc();
 }
 
 export async function executeAccrueInterest(program: Program<Cairn>) {

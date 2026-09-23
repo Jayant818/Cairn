@@ -15,20 +15,28 @@ const must = (value: string, reason: string) => {
 };
 
 must("The LST layer for tokenized equities", "product tagline");
-must("Cairn Protocol Sandbox", "guided sandbox ribbon");
-must("Connect wallet to enable transactions", "disconnected sandbox fallback");
+must("PAPER — simulated, no real funds", "paper badge in the sticky ribbon");
+must("Try it (paper trading)", "primary call to action");
+must("Found a problem?", "feedback path");
+must("https://github.com/Jayant818/Cairn/issues/new?", "feedback opens a prefilled GitHub issue");
 must("cSPYx", "receipt asset");
 must("Total managed equity", "prime-brokerage KPI bar");
 must("APPROVED BY ON-CHAIN POLICY (PASS)", "underwriting decision");
-if (!appSource.includes("Minimum {MIN_COLLATERALIZATION}%"))
-  throw new Error("MISSING: borrow liquidation threshold");
-must("deposited 10.0 SPYx", "lifecycle activity feed");
+must("Deposit &amp; mint cSPYx", "lend action");
+must("Borrow SPYx", "borrow action");
+must("deposited 10.0 SPYx", "recorded fork activity feed");
 must("Pyth verified", "oracle verification status");
 must("Deviation guard", "TWAP policy");
 must("Inactive only", "active transfer hook rejection");
 must("No borrower loops.", "constant-time accounting claim");
-must("Connected actions are signed by your wallet", "live transaction disclosure");
-must("Local build verified. Not deployed.", "deployment status");
+must("Paper mode: every action runs in your browser", "paper disclosure");
+must("Not on devnet or mainnet yet", "deployment status");
+
+// Moved 2026-09-24: the page used to print scripted figures (1,420.50 SPYx, 68.2%, 1.0215, 31.8%).
+// Every number now comes from viewOf(), so none of those literals may come back.
+for (const scripted of ["1,420.50", "68.2", "1.0215", "31.8%", "9.7895", "1.0192"]) {
+  if (appSource.includes(scripted)) throw new Error(`scripted figure is back in App.tsx: ${scripted}`);
+}
 
 if (/stockpump/i.test(plain)) throw new Error("retired product name is visible");
 if (!motionSource.includes('from "motion/react"')) throw new Error("motion components lost Motion");

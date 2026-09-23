@@ -1,33 +1,32 @@
+import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import type { MarketConfig } from "../lib/cairnMath";
+import { ratesAt } from "../lib/paperMarket";
 import { AnimatedNumber } from "./MotionUI";
 
-// Shared with the simulator so the curve and scenario metrics cannot drift.
-// oxlint-disable-next-line react/only-export-components
-export function borrowApy(utilization: number) {
-  if (utilization === 0) return 0;
-  const kinkRate = 2 + (10.4 * 80) / 75;
-  return utilization <= 80
-    ? 2 + (10.4 * utilization) / 75
-    : kinkRate + ((100 - kinkRate) * (utilization - 80)) / 20;
-}
+const LEFT = 24;
+const RIGHT = 364;
+const BOTTOM = 184;
+const TOP = 28;
 
-// oxlint-disable-next-line react/only-export-components
-export function lenderApy(utilization: number) {
-  return (borrowApy(utilization) * utilization) / 100;
-}
-
-export function YieldCurve({
-  utilization,
-  onChange,
-}: {
-  utilization: number;
-  onChange: (value: number) => void;
-}) {
+export function YieldCurve({ config, utilization }: { config: MarketConfig; utilization: number }) {
   const reduce = useReducedMotion();
-  const x = 24 + utilization * 3.4;
-  const y = utilization <= 80
-    ? 184 - (88 * utilization) / 80
-    : 96 - (68 * (utilization - 80)) / 20;
+  const [whatIf, setWhatIf] = useState<number | null>(null);
+  const shown = whatIf ?? Math.round(utilization);
+  const kinkPct = Number(config.kinkBps) / 100;
+  const kinkApy = ratesAt(config, kinkPct).lender;
+  const maxApy = Math.max(ratesAt(config, 100).lender, kinkApy * 1.5, 0.01);
+  // Piecewise y scale: the gentle range under the kink gets the lower 60% of the chart.
+  const yOf = (apy: number) => {
+    const split = BOTTOM - (BOTTOM - TOP) * 0.6;
+    if (kinkApy <= 0) return BOTTOM - ((BOTTOM - TOP) * apy) / maxApy;
+    return apy <= kinkApy
+      ? BOTTOM - ((BOTTOM - split) * apy) / kinkApy
+      : split - ((split - TOP) * (apy - kinkApy)) / (maxApy - kinkApy);
+  };
+  const xOf = (pct: number) => LEFT + ((RIGHT - LEFT) * pct) / 100;
+  const path = Array.from({ length: 101 }, (_, pct) => `${pct ? "L" : "M"}${xOf(pct).toFixed(1)} ${yOf(ratesAt(config, pct).lender).toFixed(1)}`).join(" ");
+  const rates = ratesAt(config, shown);
 
   return (
     <section className="curve-card" aria-labelledby="curve-title">
@@ -37,36 +36,34 @@ export function YieldCurve({
           <h2 id="curve-title">Demand sets the yield.</h2>
         </div>
         <div className="curve-number">
-          <AnimatedNumber value={lenderApy(utilization)} precision={2} />%
-          <span>Lender APY model</span>
+          <AnimatedNumber value={rates.lender} precision={2} />%
+          <span>Lender APY · borrow {rates.borrow.toFixed(2)}%</span>
         </div>
       </div>
       <svg className="curve" viewBox="0 0 390 220" role="img" aria-label="Utilization against lender APY">
         <path className="curve-grid" d="M24 184H364M24 140H364M24 96H364M24 52H364" />
         <motion.path
           className="curve-line"
-          d="M24 184 L296 96 C320 88 346 54 364 28"
+          d={path}
           initial={reduce ? false : { pathLength: 0 }}
           animate={{ pathLength: 1 }}
           transition={{ duration: 1.15, ease: [0.16, 1, 0.3, 1] }}
         />
-        <path className="curve-kink" d="M296 184V96" />
+        <path className="curve-kink" d={`M${xOf(kinkPct)} ${BOTTOM}V${yOf(kinkApy)}`} />
         <motion.circle
           className="curve-point"
           r="6"
-          cx={x}
-          cy={y}
           initial={false}
-          animate={{ cx: x, cy: y }}
+          animate={{ cx: xOf(shown), cy: yOf(rates.lender) }}
           transition={{ type: "spring", stiffness: 260, damping: 28 }}
         />
         <text x="24" y="210">0% utilization</text>
-        <text x="258" y="210">80% kink</text>
+        <text x={xOf(kinkPct) - 38} y="210">{kinkPct}% kink</text>
         <text x="339" y="210">100%</text>
       </svg>
       <label className="range-label" htmlFor="utilization">
-        <span>Pool utilization</span>
-        <strong>{utilization}%</strong>
+        <span>{whatIf === null ? "Current utilization" : "What-if utilization"}</span>
+        <strong>{shown}%</strong>
       </label>
       <input
         id="utilization"
@@ -74,10 +71,12 @@ export function YieldCurve({
         type="range"
         min="0"
         max="100"
-        value={utilization}
-        onChange={(event) => onChange(Number(event.target.value))}
+        value={shown}
+        onChange={(event) => setWhatIf(Number(event.target.value))}
       />
-      <p className="microcopy">Illustrative model. The last range rises sharply to protect exit liquidity.</p>
+      <p className="microcopy">
+        Computed with borrow_rate_bps and this market's config. Drag to see what-if rates. The market does not move.
+      </p>
     </section>
   );
 }

@@ -1,77 +1,56 @@
-import type { Persona } from "../hooks/useSimulator";
+import type { Mode } from "../hooks/useCairn";
 
-type SandboxActions = {
-  phase: number;
-  connected: boolean;
+export type GuideStep = { label: string; done: boolean; target: "Lend" | "Borrow" | "time" };
+
+type RibbonProps = {
+  mode: Mode;
+  clock: string;
+  steps: GuideStep[];
+  feedbackHref: string;
+  onStep: (target: GuideStep["target"]) => void;
+  onAdvance: (days: number) => void;
+  onReset: () => void;
+  onAccrue: () => void;
   busy: boolean;
-  seed: () => Promise<void>;
-  deposit: () => void;
-  borrow: () => void;
-  accrue: () => void;
 };
 
-const steps = [
-  "Get Test Assets",
-  "Stake Stock",
-  "Simulate MM Borrow",
-  "Accrue Yield",
-] as const;
-
-export function SandboxRibbon({ phase, connected, busy, seed, deposit, borrow, accrue }: SandboxActions) {
-  const actions = [seed, deposit, borrow, accrue];
+export function SandboxRibbon({ mode, clock, steps, feedbackHref, onStep, onAdvance, onReset, onAccrue, busy }: RibbonProps) {
+  const next = steps.findIndex((step) => !step.done);
   return (
-    <section className="sandbox-ribbon" aria-label="Cairn protocol sandbox walkthrough">
+    <section className="sandbox-ribbon" aria-label="Cairn trading mode">
       <div className="sandbox-ribbon-inner">
         <div className="sandbox-title">
-          <span aria-hidden="true">🧪</span>
-          <strong>Cairn Protocol Sandbox</strong>
-          <small>Verified fork replay</small>
+          {mode === "paper"
+            ? <strong className="paper-badge">PAPER — simulated, no real funds</strong>
+            : <strong className="live-badge">LIVE — local fork, wallet-signed</strong>}
+          <small>{mode === "paper" ? `Clock ${clock}` : "Your local validator"}</small>
         </div>
-        <div className="scenario-steps">
-          {steps.map((label, index) => {
-            const step = index + 1;
-            const done = phase >= step;
-            const enabled = connected && !busy && phase >= index && !done;
-            return (
+        <ol className="scenario-steps" aria-label="Guided lifecycle">
+          {steps.map((step, index) => (
+            <li key={step.label}>
               <button
                 type="button"
-                className={done ? "scenario-done" : enabled ? "scenario-active" : ""}
-                disabled={!enabled}
-                onClick={() => void actions[index]()}
-                key={label}
+                className={step.done ? "scenario-done" : index === next ? "scenario-active" : ""}
+                onClick={() => onStep(step.target)}
               >
-                <span>{done ? "✓" : step}</span>{label}
+                <span>{step.done ? "✓" : index + 1}</span>{step.label}
               </button>
-            );
-          })}
+            </li>
+          ))}
+        </ol>
+        <div className="ribbon-tools">
+          {mode === "paper" ? (
+            <>
+              <button type="button" onClick={() => onAdvance(1)}>+1 day</button>
+              <button type="button" onClick={() => onAdvance(30)}>+30 days</button>
+              <button type="button" onClick={onReset}>Reset</button>
+            </>
+          ) : (
+            <button type="button" disabled={busy} onClick={onAccrue}>Crank interest</button>
+          )}
+          <a href={feedbackHref} target="_blank" rel="noreferrer">Found a problem?</a>
         </div>
-        {!connected && <div className="sandbox-disconnected">Connect wallet to enable transactions</div>}
       </div>
     </section>
-  );
-}
-
-export function PersonaSwitcher({
-  value,
-  onChange,
-}: {
-  value: Persona;
-  onChange: (persona: Persona) => void;
-}) {
-  const options: Persona[] = ["Retail Lender", "Institutional Borrower"];
-  return (
-    <div className="persona-switcher" aria-label="Viewing mode">
-      <span>Viewing mode</span>
-      {options.map((option) => (
-        <button
-          type="button"
-          aria-pressed={value === option}
-          onClick={() => onChange(option)}
-          key={option}
-        >
-          <i aria-hidden="true" />{option === "Institutional Borrower" ? "Institutional MM" : option}
-        </button>
-      ))}
-    </div>
   );
 }

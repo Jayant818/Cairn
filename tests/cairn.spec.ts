@@ -270,9 +270,9 @@ describe("Cairn lending lifecycle on the mainnet mint fork", () => {
 
     const start = Date.now();
     while (Date.now() - start < 2_200) await new Promise((resolve) => setTimeout(resolve, 100));
-    await program.methods.setMarketConfig(config).accounts({
-      authority: authority.publicKey,
+    await program.methods.accrueInterest().accounts({
       market,
+      equityMint: SPYX,
     }).rpc();
     const accruedMarket: any = await (program.account as any).market.fetch(market);
     const indexAfter = asBigInt(accruedMarket.borrowIndex);

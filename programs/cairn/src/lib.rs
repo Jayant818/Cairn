@@ -453,6 +453,16 @@ pub mod cairn {
         Ok(())
     }
 
+    pub fn accrue_interest(ctx: Context<AccrueInterest>) -> Result<()> {
+        accrue_market(&mut ctx.accounts.market, Clock::get()?.unix_timestamp)?;
+        emit!(InterestAccrued {
+            market: ctx.accounts.market.key(),
+            borrow_index: ctx.accounts.market.borrow_index,
+            reserves: ctx.accounts.market.reserves,
+        });
+        Ok(())
+    }
+
     pub fn liquidate<'info>(
         ctx: Context<'_, '_, 'info, 'info, Liquidate<'info>>,
         requested_repay: u64,
@@ -774,6 +784,13 @@ pub struct Repaid {
 }
 
 #[event]
+pub struct InterestAccrued {
+    pub market: Pubkey,
+    pub borrow_index: u128,
+    pub reserves: u64,
+}
+
+#[event]
 pub struct Liquidated {
     pub owner: Pubkey,
     pub liquidator: Pubkey,
@@ -1027,6 +1044,18 @@ pub struct Repay<'info> {
     pub payer_equity: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(address = market.equity_token_program)]
     pub equity_token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct AccrueInterest<'info> {
+    #[account(
+        mut,
+        seeds = [Market::SEED, equity_mint.key().as_ref()],
+        bump = market.bump,
+        has_one = equity_mint
+    )]
+    pub market: Account<'info, Market>,
+    pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
 }
 
 #[derive(Accounts)]

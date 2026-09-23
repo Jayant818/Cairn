@@ -188,6 +188,7 @@ The V2 instruction set is:
 | `redeem`            | Burn receipt tokens and return available equity             |
 | `borrow`            | Lock USDC collateral and transfer equity to a borrower      |
 | `repay`             | Return equity principal and interest                        |
+| `accrue_interest`   | Permissionlessly update the borrow index to the current clock |
 | `liquidate`         | Close an unsafe position and pay the liquidator             |
 | `deposit_collateral` | Lock USDC in a borrow position                              |
 | `withdraw_collateral` | Withdraw USDC while the position remains healthy           |
@@ -231,6 +232,26 @@ The fork does not test real issuance. It seeds balances at genesis because only
 the issuers control the live mint authorities. An active transfer-hook program
 also needs its own local execution test.
 
+## Built-in institutional sandbox
+
+The interface includes a guided Cairn Protocol Sandbox for zero-friction local
+evaluation:
+
+1. **Local fixture faucet:** transfers 10 SPYx and 10,000 USDC from the funded
+   fork account to the connected wallet. It does not impersonate the real
+   issuer or mint live SPYx.
+2. **Wallet-signed staking:** deposits 5 SPYx through the Anchor `deposit`
+   instruction and creates the Token-2022 cSPYx ATA explicitly.
+3. **Two-sided borrowing:** initializes the connected wallet's position, posts
+   classic SPL USDC, and borrows SPYx through `deposit_collateral` and `borrow`.
+4. **Interest and exit:** calls the permissionless `accrue_interest` crank,
+   repays borrower debt, then burns cSPYx through `redeem`.
+
+The interface clearly separates chain state from the 30-day scenario projection.
+Solana's clock is authoritative on-chain; the browser does not forge a future
+timestamp. When disconnected, the UI falls back to the recorded fork lifecycle
+in `app/src/data/fork-run.json`.
+
 ## Current state
 
 | Capability     | Current implementation                                  |
@@ -247,8 +268,10 @@ Current facts:
 
 - Cairn program ID is `EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL`.
 - Cairn builds locally but has not been deployed or independently audited.
-- The new interface is an interactive model. It does not connect a wallet or
-  submit transactions.
+- The interface supports Phantom and Solflare and submits wallet-signed Cairn
+  transactions when connected to a configured local fork.
+- The public program ID has not been updated or deployed after the addition of
+  `accrue_interest`; the verified execution target remains the local fork.
 - Active Token-2022 transfer hooks are rejected until hook-account resolution
   and local execution tests are implemented.
 - Collateral is restricted to classic SPL Token USDC so liquidation cannot be
@@ -269,13 +292,18 @@ Requirements: Solana CLI, Anchor, Rust, Node.js, and npm.
 cargo test -p cairn --lib
 cargo clippy -p cairn --all-targets -- -D warnings
 
-# In a second terminal, run the isolated fork and lifecycle test.
+# Terminal 1: run the isolated fork.
 CAIRN_LEDGER=/tmp/cairn-lifecycle-ledger ./fork/setup.sh
+
+# Terminal 2: deploy the current program and start the local fixture faucet.
 anchor deploy --provider.cluster localnet
+npm run faucet
+
+# Verify the full lifecycle.
 ANCHOR_PROVIDER_URL=http://127.0.0.1:8899 \
   npx ts-mocha -p ./tsconfig.json -t 1000000 tests/cairn.spec.ts
 
-# Check the frontend.
+# Terminal 3: check and run the wallet-enabled frontend.
 cd app
 npm ci
 npm run check
@@ -301,6 +329,9 @@ fork/setup.sh                       local mainnet-fork setup
 fork/generate-cairn-fixtures.mjs    funded token and oracle genesis fixtures
 tests/cairn.spec.ts                 complete SPYx lending lifecycle
 app/src/lib/issuerControls.ts       issuer-control decoder
+app/src/lib/anchorClient.ts         typed Anchor provider and PDA helpers
+app/src/lib/transactions.ts         Token-2022-aware transaction dispatch
+app/src/components/SandboxRibbon.tsx guided live protocol walkthrough
 app/src/components/MotionUI.tsx     beUI-inspired accessible motion primitives
 app/src/components/YieldCurve.tsx   interactive utilization and lender-rate model
 docs/nasty-token-checklist.md       measured issuer and extension risks

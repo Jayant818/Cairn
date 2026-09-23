@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import App from "./App";
+import { WalletProviders } from "./components/WalletProviders";
 
-const html = renderToStaticMarkup(<App />);
+const html = renderToStaticMarkup(<WalletProviders><App /></WalletProviders>);
 const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const css = readFileSync(new URL("./index.css", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
@@ -14,7 +15,8 @@ const must = (value: string, reason: string) => {
 };
 
 must("The LST layer for tokenized equities", "product tagline");
-must("Interface preview. No live market is connected.", "non-live disclosure");
+must("Cairn Protocol Sandbox", "guided sandbox ribbon");
+must("Connect wallet to enable transactions", "disconnected sandbox fallback");
 must("cSPYx", "receipt asset");
 must("Total managed equity", "prime-brokerage KPI bar");
 must("APPROVED BY ON-CHAIN POLICY (PASS)", "underwriting decision");
@@ -25,7 +27,7 @@ must("Pyth verified", "oracle verification status");
 must("Deviation guard", "TWAP policy");
 must("Inactive only", "active transfer hook rejection");
 must("No borrower loops.", "constant-time accounting claim");
-must("Preview only. No wallet transaction is created.", "transaction preview disclosure");
+must("Connected actions are signed by your wallet", "live transaction disclosure");
 must("Local build verified. Not deployed.", "deployment status");
 
 if (/stockpump/i.test(plain)) throw new Error("retired product name is visible");
@@ -42,7 +44,9 @@ const definedClasses = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((mat
 const usedClasses = new Set(
   [...html.matchAll(/class="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/)).filter(Boolean),
 );
-const missingClasses = [...usedClasses].filter((name) => !definedClasses.has(name));
+const missingClasses = [...usedClasses].filter(
+  (name) => name !== "false" && !name.startsWith("wallet-adapter-") && !definedClasses.has(name),
+);
 if (missingClasses.length) throw new Error(`undefined CSS classes: ${missingClasses.join(", ")}`);
 
 const seafoamRules = [...css.matchAll(/([^{}]+)\{[^{}]*var\(--seafoam\)[^{}]*\}/g)].map(

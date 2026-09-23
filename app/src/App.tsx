@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import {
   AnimatedBadge,
   AnimatedNumber,
@@ -8,13 +10,24 @@ import {
   SwapPanel,
 } from "./components/MotionUI";
 import { Feed } from "./components/Feed";
-import { lenderApy, YieldCurve } from "./components/YieldCurve";
+import { PersonaSwitcher, SandboxRibbon } from "./components/SandboxRibbon";
+import { YieldCurve } from "./components/YieldCurve";
+import { useSimulator } from "./hooks/useSimulator";
+import { getCairnProgram } from "./lib/anchorClient";
+import { requestTestAssets } from "./lib/faucet";
 import { recordedControls } from "./lib/issuerControls";
 import { recordedSource } from "./lib/source";
+import {
+  executeAccrueInterest,
+  executeBorrow,
+  executeDeposit,
+  executeRedeemAll,
+  executeRepayAll,
+  explorerTransactionUrl,
+} from "./lib/transactions";
 
-const EXCHANGE_RATE = 1.0215;
 const STOCK_PRICE = 200;
-const MIN_COLLATERALIZATION = 120;
+const MIN_COLLATERALIZATION = 143;
 type Action = "Lend" | "Borrow";
 
 const spyxControls = recordedControls.find((mint) => mint.symbol === "SPYx")!;
@@ -25,49 +38,98 @@ function cleanAmount(value: string) {
 }
 
 export default function App() {
-  const [action, setAction] = useState<Action>("Lend");
-  const [depositAmount, setDepositAmount] = useState("10");
-  const [collateralAmount, setCollateralAmount] = useState("5000");
-  const [borrowAmount, setBorrowAmount] = useState("10");
-  const [utilization, setUtilization] = useState(68.2);
-  const [previewed, setPreviewed] = useState(false);
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  const anchorWallet = useAnchorWallet();
+  const program = useMemo(
+    () => anchorWallet ? getCairnProgram(connection, anchorWallet) : null,
+    [anchorWallet, connection],
+  );
+  const liveReady = Boolean(program && wallet.connected && wallet.publicKey);
+  const [depositAmount, setDepositAmount] = useState("5");
+  const [collateralAmount, setCollateralAmount] = useState("1600");
+  const [borrowAmount, setBorrowAmount] = useState("3.75");
+  const simulator = useSimulator({
+    connected: liveReady,
+    seed: async () => {
+      if (!wallet.publicKey) throw new Error("Connect a wallet first");
+      return (await requestTestAssets(wallet.publicKey)).tokenSignature;
+    },
+    deposit: async () => {
+      if (!program || !wallet.publicKey) throw new Error("Connect a wallet first");
+      return executeDeposit(program, wallet.publicKey, depositAmount);
+    },
+    borrow: async () => {
+      if (!program || !wallet.publicKey) throw new Error("Connect a wallet first");
+      return executeBorrow(program, wallet.publicKey, borrowAmount, collateralAmount);
+    },
+    accrue: async () => {
+      if (!program) throw new Error("Connect a wallet first");
+      return executeAccrueInterest(program);
+    },
+    redeem: async () => {
+      if (!program || !wallet.publicKey) throw new Error("Connect a wallet first");
+      await executeRepayAll(program, wallet.publicKey);
+      return executeRedeemAll(program, wallet.publicKey);
+    },
+  });
+  const action: Action = simulator.persona === "Retail Lender" ? "Lend" : "Borrow";
 
-  const receiptAmount = cleanAmount(depositAmount) / EXCHANGE_RATE;
+  const exchangeRate = liveReady ? simulator.exchangeRate : 1.0215;
+  const utilization = liveReady ? simulator.utilization : 68.2;
+  const lenderRate = liveReady ? simulator.lender : 7.51;
+  const receiptAmount = cleanAmount(depositAmount) / exchangeRate;
   const collateral = cleanAmount(collateralAmount);
   const borrowed = cleanAmount(borrowAmount);
   const collateralization = borrowed > 0 ? (collateral / (borrowed * STOCK_PRICE)) * 100 : 0;
   const health = collateralization / MIN_COLLATERALIZATION;
-  const currentApy = useMemo(() => lenderApy(utilization), [utilization]);
   const replay = recordedSource;
+  const transactionUrl = simulator.signature
+    ? explorerTransactionUrl(simulator.signature, connection.rpcEndpoint)
+    : null;
 
   return (
     <main>
-      <div className="status-strip">
-        <div className="shell status-strip-inner">
-          <span>CAIRN V2</span>
-          <span className="status-dot" />
-          <strong>Interface preview. No live market is connected.</strong>
-        </div>
-      </div>
-
+      <SandboxRibbon
+        phase={simulator.phase}
+        connected={simulator.connected}
+        busy={simulator.busy}
+        seed={simulator.seed}
+        deposit={simulator.deposit}
+        borrow={simulator.borrowMarket}
+        accrue={simulator.accrue}
+      />
       <nav className="shell nav" aria-label="Primary navigation">
         <a className="brand" href="#top" aria-label="Cairn home">
           <span className="brand-mark">C</span>
           <span>Cairn</span>
         </a>
-        <div className="nav-links">
-          <a href="#market">Market</a>
-          <a href="#risk">Risk gate</a>
-          <a href="#architecture">Architecture</a>
+        <div className="nav-tools">
+          <div className="nav-links">
+            <a href="#market">Market</a>
+            <a href="#risk">Risk gate</a>
+          </div>
+          <PersonaSwitcher value={simulator.persona} onChange={simulator.setPersona} />
+          <WalletMultiButton />
         </div>
       </nav>
 
       <dl className="shell kpi-bar" aria-label="SPYx market indicators">
-        <div><dt>Total managed equity</dt><dd>1,420.50 SPYx</dd></div>
+        <div><dt>Total managed equity</dt><dd>{liveReady ? simulator.managedEquity.toFixed(3) : "1,420.50"} SPYx</dd></div>
         <div><dt>Pool utilization</dt><dd><AnimatedNumber value={utilization} precision={1} />%</dd></div>
-        <div><dt>Staker APY</dt><dd><AnimatedNumber value={currentApy} precision={2} />%</dd></div>
-        <div><dt>Exchange rate</dt><dd>1 cSPYx = {EXCHANGE_RATE.toFixed(4)} SPYx</dd></div>
+        <div><dt>Staker APY</dt><dd><AnimatedNumber value={lenderRate} precision={2} />%</dd></div>
+        <div><dt>Exchange rate</dt><dd>1 cSPYx = {exchangeRate.toFixed(4)} SPYx</dd></div>
       </dl>
+
+      <section className="shell sandbox-ledger" aria-label="Sandbox position state">
+        <div><span>Wallet fixtures</span><strong>{simulator.walletSpyx.toFixed(3)} SPYx / {simulator.walletUsdc.toLocaleString()} USDC</strong></div>
+        <div><span>Deposited</span><strong>{simulator.deposited.toFixed(2)} SPYx</strong></div>
+        <div><span>Receipt holdings</span><strong>{simulator.receipts.toFixed(2)} cSPYx</strong></div>
+        <div><span>Borrow / lender APY</span><strong>{simulator.borrow.toFixed(1)}% / {simulator.lender.toFixed(1)}%</strong></div>
+        <p>{simulator.message}</p>
+        {simulator.error && <p className="sandbox-error">{simulator.error}</p>}
+        {transactionUrl && <a href={transactionUrl} target="_blank" rel="noreferrer">Inspect latest transaction ↗</a>}
+      </section>
 
       <section className="shell hero" id="top">
         <Reveal>
@@ -109,7 +171,7 @@ export default function App() {
             </div>
             <div className="receipt-rate">
               <span>Exchange rate</span>
-              <strong>1 cSPYx = {EXCHANGE_RATE.toFixed(4)} SPYx</strong>
+              <strong>1 cSPYx = {exchangeRate.toFixed(4)} SPYx</strong>
             </div>
             <div className="receipt-foot">Yield accrues through the exchange rate, not rebases.</div>
           </div>
@@ -145,13 +207,20 @@ export default function App() {
               <div className="underwriting-panel">
                 <div className="underwriting-head">
                   <span>Audit &amp; Compliance</span>
-                  <strong>APPROVED BY ON-CHAIN POLICY (PASS)</strong>
+                  <strong>{simulator.phase >= 1 ? "✓ EXTENSIONS UNDERWRITTEN (PASS)" : "APPROVED BY ON-CHAIN POLICY (PASS)"}</strong>
                 </div>
                 <div><span>Permanent Delegate</span><strong title={spyxControls.seize ?? ""}>Policy-matched issuer key</strong></div>
                 <div><span>Transfer Hook</span><strong>Verified non-blocking</strong></div>
                 <div><span>Freeze Authority</span><strong title={spyxControls.freeze ?? ""}>Issuer-controlled, mirrored</strong></div>
+                <div><span>Mint Close Authority</span><strong>Disabled</strong></div>
               </div>
-              <MotionTabs value={action} options={["Lend", "Borrow"] as const} onChange={setAction} />
+              <MotionTabs
+                value={action}
+                options={["Lend", "Borrow"] as const}
+                onChange={(next) => simulator.setPersona(
+                  next === "Lend" ? "Retail Lender" : "Institutional Borrower",
+                )}
+              />
               <SwapPanel panelKey={action}>
                 {action === "Lend" ? (
                   <div className="action-panel">
@@ -161,10 +230,7 @@ export default function App() {
                         id="deposit-amount"
                         inputMode="decimal"
                         value={depositAmount}
-                        onChange={(event) => {
-                          setDepositAmount(event.target.value);
-                          setPreviewed(false);
-                        }}
+                        onChange={(event) => setDepositAmount(event.target.value)}
                       />
                       <span>SPYx</span>
                     </div>
@@ -175,14 +241,29 @@ export default function App() {
                       </strong>
                     </div>
                     <div className="action-facts">
-                      <span>Rate</span><strong>{EXCHANGE_RATE.toFixed(4)} SPYx</strong>
+                      <span>Rate</span><strong>{exchangeRate.toFixed(4)} SPYx</strong>
                       <span>Withdrawal available</span><strong>31.8%</strong>
                       <span>Issuer gate</span><strong className="safe-text">Passed</strong>
                     </div>
-                    <MotionButton onClick={() => setPreviewed(true)} disabled={receiptAmount === 0}>
-                      {previewed ? "Deposit preview ready" : "Preview deposit"}
+                    <MotionButton
+                      onClick={simulator.phase >= 4 ? simulator.redeem : simulator.deposit}
+                      disabled={
+                        !simulator.connected || simulator.busy || receiptAmount === 0
+                        || simulator.phase < 1 || (simulator.phase >= 2 && simulator.phase < 4)
+                        || simulator.phase >= 5
+                      }
+                    >
+                      {simulator.busy
+                        ? "Confirm in wallet"
+                        : simulator.phase >= 5
+                          ? "Redemption complete"
+                          : simulator.phase >= 4
+                            ? "Repay & Redeem cSPYx"
+                            : simulator.phase >= 2
+                              ? "Deposit complete"
+                              : "Deposit & Mint cSPYx"}
                     </MotionButton>
-                    <p className="microcopy">Preview only. No wallet transaction is created.</p>
+                    <p className="microcopy">Connected actions are signed by your wallet and submitted to Cairn.</p>
                   </div>
                 ) : (
                   <div className="action-panel">
@@ -215,7 +296,13 @@ export default function App() {
                       <strong>{collateralization.toFixed(1)}%</strong>
                       <small>Minimum {MIN_COLLATERALIZATION}%. Liquidation begins below the threshold.</small>
                     </div>
-                    <MotionButton variant="secondary">Inspect borrow position</MotionButton>
+                    <MotionButton
+                      variant="secondary"
+                      onClick={simulator.borrowMarket}
+                      disabled={!simulator.connected || simulator.busy || simulator.phase !== 2}
+                    >
+                      {simulator.busy ? "Confirm in wallet" : simulator.phase >= 3 ? "Borrow active" : "Post collateral & borrow"}
+                    </MotionButton>
                     <p className="microcopy">Fresh Pyth spot and TWAP validation are required.</p>
                   </div>
                 )}
@@ -226,7 +313,7 @@ export default function App() {
       </section>
 
       <section className="shell curve-section">
-        <YieldCurve utilization={utilization} onChange={setUtilization} />
+        <YieldCurve utilization={utilization} onChange={simulator.setUtilization} />
       </section>
 
       <section className="shell activity-section" id="activity">

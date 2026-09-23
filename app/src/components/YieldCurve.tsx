@@ -1,14 +1,19 @@
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "./MotionUI";
 
-// Shared with the market summary so both views use one rate model.
+// Shared with the simulator so the curve and scenario metrics cannot drift.
+// oxlint-disable-next-line react/only-export-components
+export function borrowApy(utilization: number) {
+  if (utilization === 0) return 0;
+  const kinkRate = 2 + (10.4 * 80) / 75;
+  return utilization <= 80
+    ? 2 + (10.4 * utilization) / 75
+    : kinkRate + ((100 - kinkRate) * (utilization - 80)) / 20;
+}
+
 // oxlint-disable-next-line react/only-export-components
 export function lenderApy(utilization: number) {
-  const borrowRate =
-    utilization <= 80
-      ? 2 + (12 * utilization) / 80
-      : 14 + (86 * (utilization - 80)) / 20;
-  return (borrowRate * utilization * 0.9) / 100;
+  return (borrowApy(utilization) * utilization) / 100;
 }
 
 export function YieldCurve({
@@ -49,6 +54,9 @@ export function YieldCurve({
         <motion.circle
           className="curve-point"
           r="6"
+          cx={x}
+          cy={y}
+          initial={false}
           animate={{ cx: x, cy: y }}
           transition={{ type: "spring", stiffness: 260, damping: 28 }}
         />

@@ -4,7 +4,7 @@ const SLIDES = [
   {
     id: "welcome",
     title: "Welcome to Cairn",
-    body: "Your S&P 500 tokens, still working. Lend SPYx and keep a liquid receipt while market makers borrow it.",
+    body: "The LST layer for tokenized equities. Lend SPYx and keep a liquid receipt while market makers borrow it.",
     note: "This is paper trading: no wallet, no real funds.",
     visual: ["SPYx", "Cairn", "Market makers"],
   },

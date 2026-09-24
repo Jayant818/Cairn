@@ -14,8 +14,7 @@ const must = (value: string, reason: string) => {
   if (!html.includes(value)) throw new Error(`MISSING: ${reason} (${value})`);
 };
 
-must("Your S&amp;P 500 tokens, still working.", "benefit-first headline (TG 1720)");
-must("yield-bearing, liquid stock-lending receipt", "correct category term");
+must("The LST layer for tokenized equities", "product tagline (Jayant TG 1757: keep the hero)");
 must("supply APY = borrow rate × utilization × (1 − reserve)", "yield as a function, on screen");
 must("Kamino SPYx today", "live reference beside the simulated scenario");
 must("Simulated demand scenario", "simulated utilization is labelled");

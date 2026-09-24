@@ -280,10 +280,10 @@ export default function App() {
         <Reveal>
           <div className="hero-copy">
             <div className="eyebrow">Solana securities lending</div>
-            <h1>Your S&amp;P 500 tokens, still working.</h1>
+            <h1>The LST layer for tokenized equities</h1>
             <p>
-              Deposit tokenized SPYx. Receive cSPYx, a yield-bearing, liquid stock-lending receipt.
-              Market makers borrow the stock against USDC and pay interest back to cSPYx holders.
+              Deposit tokenized SPYx. Receive cSPYx. Market makers borrow the stock against USDC
+              and pay interest back to cSPYx holders.
             </p>
             <div className="hero-actions">
               <a className="cta-primary" href="#try">Try it (paper trading) <span aria-hidden="true">↓</span></a>
@@ -672,7 +672,7 @@ export default function App() {
         <div className="shell footer-inner">
           <div>
             <span className="brand footer-brand"><span className="brand-mark">C</span>Cairn</span>
-            <p>Your S&amp;P 500 tokens, still working.</p>
+            <p>The LST layer for tokenized equities.</p>
           </div>
           <div>
             <span>V2 program</span>

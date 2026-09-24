@@ -63,8 +63,20 @@ multiplier    1.003909240011759   ← STALE
 newMultiplier 1.005714560286254   ← LIVE (effective 1781755200 = 2026-06-18, already past)
 ```
 **Reading `multiplier` instead of `newMultiplier` understates SPYx by 0.1799%.** The field names
-suggest the opposite of the truth. The vault never reads either — it accounts in raw units — so
-this is a **frontend** hazard only, and the frontend must read `newMultiplier`.
+suggest the opposite of the truth.
+
+⛔ **CORRECTED 2026-09-25 — this is NOT a frontend-only hazard.** The earlier text said the vault
+"accounts in raw units", so the multiplier did not matter. That is true of cash and shares, and
+false for **health and liquidation**. Every oracle quotes a UI token (Pyth `Equity.US.SPY/USD` is
+per share, `Crypto.SPYX/USD` is per displayed token), and one raw unit of SPYx is `multiplier`
+UI tokens. Pricing raw debt at the feed price therefore undervalued debt by 0.57% at
+`newMultiplier` 1.005714, and a 2:1 split (multiplier ×2, price ÷2) would have halved the debt's
+value: twice the borrowing power and no liquidations. Found by the council review (TG 1714).
+✅ **Fixed in-program:** `policy::equity_price_multiplier` reads `ScaledUiAmountConfig`,
+timestamp-gated (`newMultiplier` once `new_multiplier_effective_timestamp` has passed, else
+`multiplier`), and `oracle::validate_prices` prices debt at price × multiplier, rounded up.
+Tests: `a_two_for_one_split_leaves_health_unchanged` (math.rs) and the fork test
+"prices debt through the live SPYx ScaledUiAmount multiplier", which the old program fails.
 
 ### 3. Pausable / blocklist
 **SPYx: `PausableConfig`, currently `paused = false`. USDY: freeze authority only.**

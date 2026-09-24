@@ -60,4 +60,8 @@ pub enum CairnError {
     PositionHasDebt,
     #[msg("liquidation produced no collateral")]
     LiquidationTooSmall,
+    #[msg("equity mint UI multiplier is invalid")]
+    InvalidScaledUiMultiplier,
+    #[msg("position is not bad debt: it still has collateral or has no debt")]
+    PositionNotBadDebt,
 }

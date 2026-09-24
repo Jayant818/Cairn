@@ -18,10 +18,10 @@ use errors::CairnError;
 use math::{
     accrue_index, assets_for_receipts, borrow_rate_bps, collateral_for_liquidation,
     debt_for_shares, managed_assets, position_is_healthy, receipt_shares_for_deposit,
-    shares_for_borrow, shares_for_repayment, utilization_bps,
+    shares_for_borrow, shares_for_repayment, utilization_bps, write_off,
 };
 use oracle::validate_prices;
-use policy::validate_market_mints;
+use policy::{equity_price_multiplier, validate_market_mints};
 use state::{Market, MarketConfig, Position, BPS_DENOM, INDEX_SCALE};
 
 declare_id!("EY5qnrQjqEsAQ65Nrd8Zd3DcqAmemzmgCYfiGfC15vCL");
@@ -267,6 +267,7 @@ pub mod cairn {
                 &ctx.accounts.equity_twap,
                 &ctx.accounts.collateral_spot,
                 &ctx.accounts.collateral_twap,
+                equity_price_multiplier(&ctx.accounts.equity_mint, Clock::get()?.unix_timestamp)?,
             )?;
             require!(
                 position_is_healthy(
@@ -349,6 +350,7 @@ pub mod cairn {
             &ctx.accounts.equity_twap,
             &ctx.accounts.collateral_spot,
             &ctx.accounts.collateral_twap,
+            equity_price_multiplier(&ctx.accounts.equity_mint, Clock::get()?.unix_timestamp)?,
         )?;
         require!(
             position_is_healthy(
@@ -463,6 +465,32 @@ pub mod cairn {
         Ok(())
     }
 
+    /// Permissionless. A position whose collateral is gone but whose debt remains would
+    /// otherwise stay in total debt forever: managed_assets keeps counting it, the cSPYx rate
+    /// stays overstated, and the last redeemers find the vault empty. Writing it off moves the
+    /// loss into the exchange rate now, with reserves as first loss.
+    pub fn write_off_bad_debt(ctx: Context<WriteOffBadDebt>) -> Result<()> {
+        accrue_market(&mut ctx.accounts.market, Clock::get()?.unix_timestamp)?;
+        let shares = ctx.accounts.position.debt_shares;
+        let debt = debt_for_shares(shares, ctx.accounts.market.borrow_index)?;
+        let (total_debt_shares, reserves) = write_off(
+            ctx.accounts.market.total_debt_shares,
+            shares,
+            ctx.accounts.position.collateral,
+            debt,
+            ctx.accounts.market.reserves,
+        )?;
+        ctx.accounts.market.total_debt_shares = total_debt_shares;
+        ctx.accounts.market.reserves = reserves;
+        ctx.accounts.position.debt_shares = 0;
+        emit!(BadDebtWrittenOff {
+            owner: ctx.accounts.position.owner,
+            debt,
+            debt_shares: shares,
+        });
+        Ok(())
+    }
+
     pub fn liquidate<'info>(
         ctx: Context<'_, '_, 'info, 'info, Liquidate<'info>>,
         requested_repay: u64,
@@ -480,6 +508,7 @@ pub mod cairn {
             &ctx.accounts.equity_twap,
             &ctx.accounts.collateral_spot,
             &ctx.accounts.collateral_twap,
+            equity_price_multiplier(&ctx.accounts.equity_mint, Clock::get()?.unix_timestamp)?,
         )?;
         require!(
             !position_is_healthy(
@@ -791,6 +820,13 @@ pub struct InterestAccrued {
 }
 
 #[event]
+pub struct BadDebtWrittenOff {
+    pub owner: Pubkey,
+    pub debt: u64,
+    pub debt_shares: u128,
+}
+
+#[event]
 pub struct Liquidated {
     pub owner: Pubkey,
     pub liquidator: Pubkey,
@@ -892,7 +928,12 @@ pub struct Deposit<'info> {
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub receipt_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = equity_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = equity_mint,
+        associated_token::authority = market,
+        associated_token::token_program = equity_token_program
+    )]
     pub equity_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = equity_mint, token::authority = depositor)]
     pub depositor_equity: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -922,7 +963,12 @@ pub struct Redeem<'info> {
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub receipt_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = equity_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = equity_mint,
+        associated_token::authority = market,
+        associated_token::token_program = equity_token_program
+    )]
     pub equity_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = equity_mint, token::authority = redeemer)]
     pub redeemer_equity: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -951,7 +997,12 @@ pub struct DepositCollateral<'info> {
     )]
     pub position: Account<'info, Position>,
     pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = collateral_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = collateral_mint,
+        associated_token::authority = market,
+        associated_token::token_program = collateral_token_program
+    )]
     pub collateral_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = collateral_mint, token::authority = owner)]
     pub owner_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -980,7 +1031,12 @@ pub struct WithdrawCollateral<'info> {
     pub position: Account<'info, Position>,
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
     pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = collateral_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = collateral_mint,
+        associated_token::authority = market,
+        associated_token::token_program = collateral_token_program
+    )]
     pub collateral_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = collateral_mint, token::authority = owner)]
     pub owner_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -1013,7 +1069,12 @@ pub struct Borrow<'info> {
     pub position: Account<'info, Position>,
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
     pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = equity_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = equity_mint,
+        associated_token::authority = market,
+        associated_token::token_program = equity_token_program
+    )]
     pub equity_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = equity_mint, token::authority = borrower)]
     pub borrower_equity: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -1038,7 +1099,12 @@ pub struct Repay<'info> {
     #[account(mut, has_one = market)]
     pub position: Account<'info, Position>,
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = equity_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = equity_mint,
+        associated_token::authority = market,
+        associated_token::token_program = equity_token_program
+    )]
     pub equity_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = equity_mint, token::authority = payer)]
     pub payer_equity: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -1073,9 +1139,19 @@ pub struct Liquidate<'info> {
     pub position: Account<'info, Position>,
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
     pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut, token::mint = equity_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = equity_mint,
+        associated_token::authority = market,
+        associated_token::token_program = equity_token_program
+    )]
     pub equity_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-    #[account(mut, token::mint = collateral_mint, token::authority = market)]
+    #[account(
+        mut,
+        associated_token::mint = collateral_mint,
+        associated_token::authority = market,
+        associated_token::token_program = collateral_token_program
+    )]
     pub collateral_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = equity_mint, token::authority = liquidator)]
     pub liquidator_equity: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -1092,6 +1168,20 @@ pub struct Liquidate<'info> {
 }
 
 #[derive(Accounts)]
+pub struct WriteOffBadDebt<'info> {
+    #[account(
+        mut,
+        seeds = [Market::SEED, equity_mint.key().as_ref()],
+        bump = market.bump,
+        has_one = equity_mint
+    )]
+    pub market: Account<'info, Market>,
+    #[account(mut, has_one = market)]
+    pub position: Account<'info, Position>,
+    pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
+}
+
+#[derive(Accounts)]
 pub struct AdminMarket<'info> {
     pub authority: Signer<'info>,
     #[account(mut, has_one = authority)]
@@ -1104,6 +1194,12 @@ pub struct ReconcileCash<'info> {
     #[account(mut, has_one = authority, has_one = equity_mint)]
     pub market: Account<'info, Market>,
     pub equity_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(token::mint = equity_mint, token::authority = market)]
+    #[account(
+        associated_token::mint = equity_mint,
+        associated_token::authority = market,
+        associated_token::token_program = equity_token_program
+    )]
     pub equity_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(address = market.equity_token_program)]
+    pub equity_token_program: Interface<'info, TokenInterface>,
 }

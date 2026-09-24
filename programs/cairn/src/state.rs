@@ -4,6 +4,8 @@ pub const BPS_DENOM: u128 = 10_000;
 pub const INDEX_SCALE: u128 = 1_000_000_000_000_000_000;
 pub const PRICE_SCALE: u128 = 1_000_000_000_000;
 pub const SECONDS_PER_YEAR: u128 = 31_536_000;
+/// Fixed-point scale for a Token-2022 ScaledUiAmount multiplier: 1.0 == MULTIPLIER_SCALE.
+pub const MULTIPLIER_SCALE: u128 = 1_000_000_000_000;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, InitSpace)]
 pub struct MarketConfig {

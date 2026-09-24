@@ -18,7 +18,34 @@ use anchor_spl::token_interface::{
     Mint,
 };
 
-use crate::errors::CairnError;
+use crate::{
+    errors::CairnError,
+    math::{effective_multiplier, multiplier_fixed},
+    state::MULTIPLIER_SCALE,
+};
+
+/// The equity mint's ScaledUiAmount multiplier at `now`, in fixed point. A classic SPL mint,
+/// or a Token-2022 mint without the extension, is 1.0. Debt is held in RAW units and every
+/// oracle quotes UI units, so health and liquidation must price debt through this.
+pub fn equity_price_multiplier(mint: &InterfaceAccount<Mint>, now: i64) -> Result<u128> {
+    if *mint.to_account_info().owner != anchor_spl::token_2022::ID {
+        return Ok(MULTIPLIER_SCALE);
+    }
+    let info = mint.to_account_info();
+    let data = info.try_borrow_data()?;
+    let state = StateWithExtensions::<Token2022Mint>::unpack(&data)
+        .map_err(|_| error!(CairnError::MintPolicyMismatch))?;
+    let Ok(config) = state.get_extension::<ScaledUiAmountConfig>() else {
+        return Ok(MULTIPLIER_SCALE);
+    };
+    let multiplier = effective_multiplier(
+        config.multiplier.into(),
+        config.new_multiplier.into(),
+        config.new_multiplier_effective_timestamp.into(),
+        now,
+    );
+    Ok(multiplier_fixed(multiplier)?)
+}
 
 pub fn validate_market_mints(
     equity: &InterfaceAccount<Mint>,

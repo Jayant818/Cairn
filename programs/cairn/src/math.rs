@@ -1,6 +1,6 @@
 use crate::{
     errors::CairnError,
-    state::{MarketConfig, BPS_DENOM, INDEX_SCALE, SECONDS_PER_YEAR},
+    state::{MarketConfig, BPS_DENOM, INDEX_SCALE, MULTIPLIER_SCALE, SECONDS_PER_YEAR},
 };
 
 pub fn mul_div_floor(a: u128, b: u128, denominator: u128) -> Result<u128, CairnError> {
@@ -251,6 +251,51 @@ pub fn collateral_for_liquidation(
     u64::try_from(collateral).map_err(|_| CairnError::MathOverflow)
 }
 
+/// The multiplier a Token-2022 ScaledUiAmount mint applies at `now`. The mint stores the
+/// old value in `multiplier` and the scheduled one in `new_multiplier`. The field names
+/// suggest the opposite of the truth once the timestamp has passed.
+pub fn effective_multiplier(multiplier: f64, new_multiplier: f64, new_effective_at: i64, now: i64) -> f64 {
+    if now >= new_effective_at {
+        new_multiplier
+    } else {
+        multiplier
+    }
+}
+
+/// f64 multiplier -> fixed point, rounded UP so debt is never undervalued.
+pub fn multiplier_fixed(multiplier: f64) -> Result<u128, CairnError> {
+    if !multiplier.is_finite() || multiplier <= 0.0 || multiplier > 1_000_000.0 {
+        return Err(CairnError::InvalidScaledUiMultiplier);
+    }
+    Ok((multiplier * MULTIPLIER_SCALE as f64).ceil() as u128)
+}
+
+/// An oracle quotes one UI token (one share-equivalent). One RAW unit of a scaled mint is
+/// worth `multiplier` UI units, so debt held in raw units must be priced at price x multiplier.
+/// Rounded up: the adverse direction for the borrower.
+pub fn scale_equity_price(price: u128, multiplier: u128) -> Result<u128, CairnError> {
+    mul_div_ceil(price, multiplier, MULTIPLIER_SCALE)
+}
+
+/// Bad debt write-off: a position with no collateral left and debt outstanding. Returns
+/// (new total debt shares, new reserves). Reserves are first-loss; lenders absorb the rest
+/// through the exchange rate NOW, instead of the last redeemers finding an empty vault.
+pub fn write_off(
+    total_debt_shares: u128,
+    position_shares: u128,
+    collateral: u64,
+    debt: u64,
+    reserves: u64,
+) -> Result<(u128, u64), CairnError> {
+    if collateral != 0 || position_shares == 0 {
+        return Err(CairnError::PositionNotBadDebt);
+    }
+    let total = total_debt_shares
+        .checked_sub(position_shares)
+        .ok_or(CairnError::MathOverflow)?;
+    Ok((total, reserves.saturating_sub(debt)))
+}
+
 fn pow10(exponent: u32) -> Result<u128, CairnError> {
     10u128.checked_pow(exponent).ok_or(CairnError::MathOverflow)
 }
@@ -341,6 +386,56 @@ mod tests {
         let redeemed = assets_for_receipts(receipts, receipts, assets).unwrap();
         assert_eq!(redeemed, 1_054_000);
         assert!(redeemed > deposit);
+    }
+
+    #[test]
+    fn scaled_ui_multiplier_is_timestamp_gated() {
+        // SPYx mainnet, read 2026-09: multiplier is stale, new_multiplier is live.
+        assert_eq!(effective_multiplier(1.003909240011759, 1.005714560286254, 1_781_755_200, 1_781_755_199), 1.003909240011759);
+        assert_eq!(effective_multiplier(1.003909240011759, 1.005714560286254, 1_781_755_200, 1_781_755_200), 1.005714560286254);
+        assert!(multiplier_fixed(0.0).is_err());
+        assert!(multiplier_fixed(f64::NAN).is_err());
+        assert!(multiplier_fixed(f64::INFINITY).is_err());
+        assert_eq!(multiplier_fixed(1.0).unwrap(), MULTIPLIER_SCALE);
+    }
+
+    #[test]
+    fn debt_is_valued_at_the_multiplier() {
+        // 1 raw SPYx at multiplier 1.005714... is 1.005714... shares.
+        let m = multiplier_fixed(1.005714560286254).unwrap();
+        let price = 200 * PRICE_SCALE;
+        let scaled = scale_equity_price(price, m).unwrap();
+        assert!(scaled > price);
+        assert_eq!(scaled, 201_142_912_057_400);
+    }
+
+    #[test]
+    fn a_two_for_one_split_leaves_health_unchanged() {
+        // A 2:1 split doubles the multiplier and halves the per-share price. Raw balances do
+        // not move. Health must not move either.
+        let collateral = 1_000_000_000u64; // 1,000 USDC
+        let before = scale_equity_price(200 * PRICE_SCALE, multiplier_fixed(1.0).unwrap()).unwrap();
+        let after = scale_equity_price(100 * PRICE_SCALE, multiplier_fixed(2.0).unwrap()).unwrap();
+        assert_eq!(before, after);
+        for debt in [100_000_000u64, 249_000_000, 250_000_000, 251_000_000, 400_000_000] {
+            let h_before = position_is_healthy(collateral, debt, 6, 8, PRICE_SCALE, before, 5_000).unwrap();
+            let h_after = position_is_healthy(collateral, debt, 6, 8, PRICE_SCALE, after, 5_000).unwrap();
+            assert_eq!(h_before, h_after, "debt {debt}");
+        }
+        // The bug this replaces: price the raw debt at the per-share price and the split
+        // doubles what can be borrowed. 4 raw SPYx is unhealthy before and healthy after.
+        let unscaled_after = 100 * PRICE_SCALE;
+        assert!(!position_is_healthy(collateral, 400_000_000, 6, 8, PRICE_SCALE, before, 5_000).unwrap());
+        assert!(position_is_healthy(collateral, 400_000_000, 6, 8, PRICE_SCALE, unscaled_after, 5_000).unwrap());
+    }
+
+    #[test]
+    fn bad_debt_is_written_off_and_reserves_take_the_first_loss() {
+        assert_eq!(write_off(1_000, 300, 0, 50, 20).unwrap(), (700, 0));
+        assert_eq!(write_off(1_000, 300, 0, 50, 80).unwrap(), (700, 30));
+        assert!(matches!(write_off(1_000, 300, 1, 50, 80), Err(CairnError::PositionNotBadDebt)));
+        assert!(matches!(write_off(1_000, 0, 0, 0, 80), Err(CairnError::PositionNotBadDebt)));
+        assert!(matches!(write_off(100, 300, 0, 50, 80), Err(CairnError::MathOverflow)));
     }
 
     proptest! {

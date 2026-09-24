@@ -3,7 +3,7 @@ use pyth_solana_receiver_sdk::price_update::{PriceUpdateV2, TwapUpdate};
 
 use crate::{
     errors::CairnError,
-    math::{confidence_bps, deviation_bps, normalized_price},
+    math::{confidence_bps, deviation_bps, normalized_price, scale_equity_price},
     state::MarketConfig,
 };
 
@@ -19,6 +19,7 @@ pub fn validate_prices(
     equity_twap: &Account<TwapUpdate>,
     collateral_spot: &Account<PriceUpdateV2>,
     collateral_twap: &Account<TwapUpdate>,
+    equity_multiplier: u128,
 ) -> Result<ValidatedPrices> {
     let equity = equity_spot
         .get_price_no_older_than(clock, config.max_price_age_seconds, &config.equity_feed_id)
@@ -81,7 +82,12 @@ pub fn validate_prices(
     );
 
     Ok(ValidatedPrices {
-        equity_debt_price: normalized_price(equity.price, equity.conf, equity.exponent, true)?,
+        // Priced per RAW equity unit: the feed quotes a UI token, and one raw unit of a
+        // ScaledUiAmount mint is `multiplier` UI tokens.
+        equity_debt_price: scale_equity_price(
+            normalized_price(equity.price, equity.conf, equity.exponent, true)?,
+            equity_multiplier,
+        )?,
         collateral_price: normalized_price(
             collateral.price,
             collateral.conf,

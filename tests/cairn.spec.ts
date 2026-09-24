@@ -7,6 +7,7 @@ import {
   ExtensionType,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
+  createAccount,
   createAssociatedTokenAccountIdempotent,
   createInitializeDefaultAccountStateInstruction,
   createInitializeMint2Instruction,
@@ -20,6 +21,7 @@ import {
   getMintLen,
   getPausableConfig,
   getPermanentDelegate,
+  getScaledUiAmountConfig,
   getTransferHook,
   transferChecked,
 } from "@solana/spl-token";
@@ -318,5 +320,85 @@ describe("Cairn lending lifecycle on the mainnet mint fork", () => {
       await getAccount(connection, depositorEquity, "confirmed", TOKEN_2022_PROGRAM_ID)
     ).amount - equityBeforeRedeem;
     assert.isTrue(redeemed > deposited, `cSPYx did not capture interest: ${redeemed} <= ${deposited}`);
+  });
+
+  const expectError = async (run: () => Promise<unknown>, pattern: RegExp, label: string) => {
+    try {
+      await run();
+    } catch (error) {
+      const text = `${error}\n${(error as any)?.logs?.join("\n") ?? ""}`;
+      assert.match(text, pattern, `${label}: wrong error`);
+      return;
+    }
+    assert.fail(`${label}: the transaction succeeded`);
+  };
+
+  it("rejects a second market-owned token account as the equity vault", async function () {
+    const depositorEquity = new PublicKey(manifest.spyxAta);
+    const depositorReceipt = getAssociatedTokenAddressSync(receiptMint.publicKey, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
+    // Anyone can create a token account whose owner is the market PDA. It is not the vault.
+    const decoy = await createAccount(
+      connection, authority, SPYX, market, Keypair.generate(), { commitment: "confirmed" }, TOKEN_2022_PROGRAM_ID,
+    );
+    await expectError(
+      () => program.methods.deposit(new BN(100_000_000)).accounts({
+        depositor: authority.publicKey,
+        market,
+        equityMint: SPYX,
+        receiptMint: receiptMint.publicKey,
+        equityVault: decoy,
+        depositorEquity,
+        depositorReceipt,
+        equityTokenProgram: TOKEN_2022_PROGRAM_ID,
+        receiptTokenProgram: TOKEN_2022_PROGRAM_ID,
+      }).rpc(),
+      /ConstraintAssociated|2009|equity_vault/,
+      "deposit into a decoy vault",
+    );
+  });
+
+  it("refuses to write off a position that still has collateral", async function () {
+    await expectError(
+      () => program.methods.writeOffBadDebt().accounts({ market, position, equityMint: SPYX }).rpc(),
+      /PositionNotBadDebt/,
+      "write off a collateralized position",
+    );
+  });
+
+  it("prices debt through the live SPYx ScaledUiAmount multiplier", async function () {
+    const equity = await getMint(connection, SPYX, "confirmed", TOKEN_2022_PROGRAM_ID);
+    const scaled = getScaledUiAmountConfig(equity);
+    assert.isNotNull(scaled, "the cloned SPYx mint lost its ScaledUiAmount extension");
+    const now = Math.floor(Date.now() / 1000);
+    const multiplier = now >= Number(scaled!.newMultiplierEffectiveTimestamp) ? scaled!.newMultiplier : scaled!.multiplier;
+    assert.isAbove(multiplier, 1, "the test needs a multiplier above 1 to tell scaled from unscaled");
+
+    // Refill idle cash so liquidity is not what refuses the borrow.
+    const depositorEquity = new PublicKey(manifest.spyxAta);
+    const depositorReceipt = getAssociatedTokenAddressSync(receiptMint.publicKey, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
+    await program.methods.deposit(new BN(2_000_000_000)).accounts({
+      depositor: authority.publicKey, market, equityMint: SPYX, receiptMint: receiptMint.publicKey, equityVault,
+      depositorEquity, depositorReceipt, equityTokenProgram: TOKEN_2022_PROGRAM_ID, receiptTokenProgram: TOKEN_2022_PROGRAM_ID,
+    }).rpc();
+
+    // 3,000 USDC at the lower bound 0.9999 and 50% LTV allows 1,499.85 USDC of debt.
+    // Debt price: 200.10 per UI token (upper bound). Unscaled that is 7.4955 raw SPYx; scaled by
+    // the multiplier it is 7.4955 / multiplier. A borrow between the two must be refused.
+    const limitValue = 1_499.85;
+    const unscaledMax = limitValue / 200.1;
+    const scaledMax = unscaledMax / multiplier;
+    const between = Math.floor(((unscaledMax + scaledMax) / 2) * 1e8);
+    const safe = Math.floor(scaledMax * 0.99 * 1e8);
+    const borrowerEquity = getAssociatedTokenAddressSync(SPYX, borrower.publicKey, false, TOKEN_2022_PROGRAM_ID);
+    const borrowIx = (amount: number) => program.methods.borrow(new BN(amount)).accounts({
+      borrower: borrower.publicKey, market, position, equityMint: SPYX, collateralMint: USDC, equityVault, borrowerEquity,
+      equitySpot: oracle("equity-spot"), equityTwap: oracle("equity-twap"),
+      collateralSpot: oracle("collateral-spot"), collateralTwap: oracle("collateral-twap"),
+      equityTokenProgram: TOKEN_2022_PROGRAM_ID,
+    }).signers([borrower]).rpc();
+    await expectError(() => borrowIx(between), /UnhealthyPosition/, "borrow above the scaled limit");
+    await borrowIx(safe);
+    const debtShares = asBigInt((await (program.account as any).position.fetch(position)).debtShares);
+    assert.isTrue(debtShares > 0n, "the borrow under the scaled limit did not land");
   });
 });

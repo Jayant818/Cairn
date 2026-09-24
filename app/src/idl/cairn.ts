@@ -144,7 +144,60 @@ export type Cairn = {
         },
         {
           "name": "equityVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "equityTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "borrowerEquity",
@@ -229,7 +282,60 @@ export type Cairn = {
         },
         {
           "name": "equityVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "equityTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "depositorEquity",
@@ -317,7 +423,60 @@ export type Cairn = {
         },
         {
           "name": "collateralVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "collateralTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "collateralMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "ownerCollateral",
@@ -646,11 +805,117 @@ export type Cairn = {
         },
         {
           "name": "equityVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "equityTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "collateralVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "collateralTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "collateralMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "liquidatorEquity",
@@ -717,7 +982,63 @@ export type Cairn = {
           ]
         },
         {
-          "name": "equityVault"
+          "name": "equityVault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "equityTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "equityTokenProgram"
         }
       ],
       "args": []
@@ -778,7 +1099,60 @@ export type Cairn = {
         },
         {
           "name": "equityVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "equityTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "redeemerEquity",
@@ -857,7 +1231,60 @@ export type Cairn = {
         },
         {
           "name": "equityVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "equityTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "payerEquity",
@@ -1035,7 +1462,60 @@ export type Cairn = {
         },
         {
           "name": "collateralVault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "collateralTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "collateralMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "ownerCollateral",
@@ -1063,6 +1543,64 @@ export type Cairn = {
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "writeOffBadDebt",
+      "docs": [
+        "Permissionless. A position whose collateral is gone but whose debt remains would",
+        "otherwise stay in total debt forever: managed_assets keeps counting it, the cSPYx rate",
+        "stays overstated, and the last redeemers find the vault empty. Writing it off moves the",
+        "loss into the exchange rate now, with reserves as first loss."
+      ],
+      "discriminator": [
+        166,
+        5,
+        239,
+        3,
+        173,
+        87,
+        155,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "equityMint"
+              }
+            ]
+          },
+          "relations": [
+            "position"
+          ]
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "equityMint",
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1120,6 +1658,19 @@ export type Cairn = {
     }
   ],
   "events": [
+    {
+      "name": "badDebtWrittenOff",
+      "discriminator": [
+        236,
+        46,
+        22,
+        26,
+        81,
+        51,
+        171,
+        41
+      ]
+    },
     {
       "name": "borrowed",
       "discriminator": [
@@ -1409,9 +1960,39 @@ export type Cairn = {
       "code": 6028,
       "name": "liquidationTooSmall",
       "msg": "liquidation produced no collateral"
+    },
+    {
+      "code": 6029,
+      "name": "invalidScaledUiMultiplier",
+      "msg": "equity mint UI multiplier is invalid"
+    },
+    {
+      "code": 6030,
+      "name": "positionNotBadDebt",
+      "msg": "position is not bad debt: it still has collateral or has no debt"
     }
   ],
   "types": [
+    {
+      "name": "badDebtWrittenOff",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "debt",
+            "type": "u64"
+          },
+          {
+            "name": "debtShares",
+            "type": "u128"
+          }
+        ]
+      }
+    },
     {
       "name": "borrowed",
       "type": {

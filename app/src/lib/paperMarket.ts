@@ -80,6 +80,8 @@ export type PaperEvent = {
   message: string;
   at: bigint;
   exchangeRate: number;
+  // SPYx moved by the event, when it moves SPYx: in for deposit/repay, out for redeem/borrow.
+  spyx?: bigint;
 };
 
 export type PaperState = {
@@ -91,9 +93,27 @@ export type PaperState = {
 };
 
 // 2026-09-26 00:00 UTC. The clock only moves when the user advances it.
-const GENESIS = 1_790_380_800n;
+export const GENESIS = 1_790_380_800n;
 
-export function genesisState(): PaperState {
+// Variant A (default): the market opens with sample history, so a lender sees yield.
+// Variant B: set to false for an empty market with no borrower and therefore 0% yield.
+export const PAPER_SEEDED = true;
+
+function emptyMarket(): PaperState {
+  return {
+    market: {
+      cash: 0n, totalDebtShares: 0n, borrowIndex: INDEX_SCALE, reserves: 0n,
+      totalCollateral: 0n, receiptSupply: 0n, lastAccrual: GENESIS,
+    },
+    wallet: { spyx: 25n * SPYX, usdc: 10_000n * USDC, cspyx: 0n },
+    position: { collateral: 0n, debtShares: 0n },
+    now: GENESIS,
+    events: [],
+  };
+}
+
+export function genesisState(seeded = PAPER_SEEDED): PaperState {
+  if (!seeded) return emptyMarket();
   // Fixture history: a genesis lender deposits 1,000 SPYx, a fixture market maker
   // posts 250,000 USDC and borrows 600 SPYx, then 30 days pass.
   let state: PaperState = {
@@ -144,9 +164,9 @@ function spend(balance: bigint, amount: bigint, symbol: string) {
   return balance - amount;
 }
 
-function log(state: PaperState, kind: PaperEventKind, message: string): PaperState {
+function log(state: PaperState, kind: PaperEventKind, message: string, spyx?: bigint): PaperState {
   const events = [
-    { seq: (state.events[0]?.seq ?? -1) + 1, kind, message, at: state.now, exchangeRate: exchangeRate(state.market) },
+    { seq: (state.events[0]?.seq ?? -1) + 1, kind, message, at: state.now, exchangeRate: exchangeRate(state.market), spyx },
     ...state.events,
   ].slice(0, 50);
   return { ...state, events };
@@ -165,7 +185,7 @@ export function deposit(state: PaperState, amount: bigint): PaperState {
     market: { ...market, cash: nextCash, receiptSupply: market.receiptSupply + shares },
     wallet: { ...state.wallet, spyx, cspyx: state.wallet.cspyx + shares },
   };
-  return log(next, "deposit", `Deposited ${fmt(amount, 8)} SPYx and minted ${fmt(shares, 8)} cSPYx.`);
+  return log(next, "deposit", `Deposited ${fmt(amount, 8)} SPYx and minted ${fmt(shares, 8)} cSPYx.`, amount);
 }
 
 export function redeem(state: PaperState, receipts: bigint): PaperState {
@@ -179,7 +199,7 @@ export function redeem(state: PaperState, receipts: bigint): PaperState {
     market: { ...market, cash: market.cash - amount, receiptSupply: market.receiptSupply - receipts },
     wallet: { ...state.wallet, cspyx, spyx: state.wallet.spyx + amount },
   };
-  return log(next, "redeem", `Burned ${fmt(receipts, 8)} cSPYx and received ${fmt(amount, 8)} SPYx.`);
+  return log(next, "redeem", `Burned ${fmt(receipts, 8)} cSPYx and received ${fmt(amount, 8)} SPYx.`, amount);
 }
 
 export function depositCollateral(state: PaperState, amount: bigint): PaperState {

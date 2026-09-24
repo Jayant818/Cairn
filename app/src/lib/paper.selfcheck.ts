@@ -31,6 +31,7 @@ import {
   withdrawCollateral,
   type PaperState,
 } from "./paperMarket";
+import { guideOf } from "./guide";
 
 const eq = (actual: unknown, expected: unknown, label: string) => {
   if (actual !== expected) throw new Error(`${label}: ${String(actual)} !== ${String(expected)}`);
@@ -114,4 +115,23 @@ const cash = crowded.market.cash;
 rejects(() => redeem({ ...crowded, market: { ...crowded.market, cash: 1n } }, crowded.wallet.cspyx), "InsufficientLiquidity", "redeem above idle cash");
 eq(crowded.market.cash, cash, "failed redeem left state untouched");
 
-console.log("paper selfcheck PASS: 5 math.rs vectors, 6 rounding vectors, lifecycle, LTV, repay and liquidity guards");
+// Guided path: derived from events, one step at a time, profit is real SPYx out minus in.
+{
+  let g: PaperState = genesisState();
+  const at = (state: PaperState) => guideOf(state.events, viewOf(state.market, state.position, state.wallet));
+  eq(at(g).step, "lend", "guide starts at lend");
+  eq(at(g).lendAmount, 5n * SPYX, "guide lends 5 SPYx");
+  g = deposit(g, at(g).lendAmount);
+  eq(at(g).step, "skip", "after lend the guide asks to skip");
+  eq(at(g).completed, 2, "lend also completes the hold-cSPYx step");
+  g = advanceTime(g, 30n * 86_400n);
+  eq(at(g).step, "withdraw", "after skip the guide asks to withdraw");
+  g = redeem(g, g.wallet.cspyx);
+  const done = at(g);
+  eq(done.step, "done", "after withdraw the guide is done");
+  if (!(done.profit > 0n)) throw new Error(`guide profit not positive: ${done.profit}`);
+  eq(done.days, 30, "guide measures 30 days");
+  eq(genesisState(false).market.receiptSupply, 0n, "variant B starts empty");
+}
+
+console.log("paper selfcheck PASS: 5 math.rs vectors, 6 rounding vectors, lifecycle, LTV, repay and liquidity guards, guided path");

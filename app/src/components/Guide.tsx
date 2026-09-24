@@ -50,7 +50,7 @@ export function GuideCard({ guide, view, live, onLend, onSkip, onWithdraw, onBor
   }
 
   return (
-    <section className="guide-card" aria-labelledby="guide-title" data-tour="guide">
+    <section className="guide-card" aria-labelledby="guide-title">
       <div className="guide-top">
         <span className="eyebrow">Try it (paper trading)</span>
         <span className="guide-count">{guide.completed === 4 ? "Done" : `Step ${Math.min(guide.completed + 1, 4)} of 4`}</span>
@@ -69,7 +69,9 @@ export function GuideCard({ guide, view, live, onLend, onSkip, onWithdraw, onBor
       ) : (
         <>
           {action && (
-            <MotionButton onClick={action.run} disabled={Boolean(guide.blocked)}>{action.label}</MotionButton>
+            <div className="guide-action" data-coach="guide-primary">
+              <MotionButton onClick={action.run} disabled={Boolean(guide.blocked)}>{action.label}</MotionButton>
+            </div>
           )}
           <p className={guide.blocked ? "guide-for-you guide-blocked" : "guide-for-you"}>{guide.blocked ?? forYou}</p>
           {guide.step === "done" && (

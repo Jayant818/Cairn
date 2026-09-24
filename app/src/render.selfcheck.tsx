@@ -40,6 +40,8 @@ must("Skip 30 days", "time folded into skip buttons");
 must("Simulated market: 1 sample lender", "the sample data is labelled");
 must("What your receipt is worth. It only goes up.", "plain-English line under each stat");
 must("Try the borrower side and custom amounts", "advanced actions collapsed");
+must("Lend, wait, withdraw.", "guided section under the hero");
+must("Try it (paper trading) <span", "hero CTA kept (TG 1694: hero content unchanged)");
 must("SPYx price (paper oracle)", "paper oracle control for liquidation");
 must("Liquidate", "liquidation tab");
 if (/Clock \d{4}-\d{2}-\d{2}/.test(plain)) throw new Error("the Clock <date> label is back");

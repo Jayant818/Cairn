@@ -33,14 +33,32 @@ export function WalletChip({ wallet, label }: { wallet: Wallet; label: string })
     return () => clearTimeout(timer);
   }, [wallet]);
 
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: Event) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <div className={`wallet-chip${delta ? " wallet-chip-flash" : ""}`} data-tour="wallet" aria-label={label}>
-      <span className="wallet-chip-label">{label}</span>
-      <span className="wallet-chip-values">
+    <div ref={ref} className={`wallet-chip${delta ? " wallet-chip-flash" : ""}${open ? " wallet-chip-open" : ""}`} data-tour="wallet">
+      <button type="button" className="wallet-chip-button" aria-expanded={open} aria-controls="wallet-detail" onClick={() => setOpen(!open)}>
+        <span className="wallet-chip-label">{label}</span>
+        <strong>{fmt(wallet.spyx, 8, 2)} SPYx</strong>
+        <span aria-hidden="true">▾</span>
+      </button>
+      <dl className="wallet-pop" id="wallet-detail">
         {ASSETS.map(({ id, unit, decimals, shown }) => (
-          <span key={id}><strong>{fmt(wallet[id], decimals, shown)}</strong> {unit}</span>
+          <div key={id}><dt>{unit}</dt><dd>{fmt(wallet[id], decimals, shown)}</dd></div>
         ))}
-      </span>
+      </dl>
       <span className="wallet-chip-delta" role="status" aria-live="polite">{delta?.text ?? ""}</span>
     </div>
   );

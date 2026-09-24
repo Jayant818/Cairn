@@ -11,8 +11,9 @@ import {
 import { Feed, type FeedRow } from "./components/Feed";
 import { GuideCard } from "./components/Guide";
 import { SandboxRibbon } from "./components/SandboxRibbon";
-import { Tour } from "./components/Tour";
-import { tourDone } from "./lib/tourStore";
+import { CoachMark } from "./components/CoachMark";
+import { Welcome } from "./components/Welcome";
+import { coachSeen, markCoachSeen, markWelcomeDone, resetTour, welcomeDone } from "./lib/tourStore";
 import { WalletChip } from "./components/WalletChip";
 import { YieldCurve } from "./components/YieldCurve";
 import { useCairn, type ActionName } from "./hooks/useCairn";
@@ -114,12 +115,34 @@ export default function App() {
 
   const guide = guideOf(cairn.events, view);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [touring, setTouring] = useState(false);
-  // First visit opens the tour. Runs after mount, so server render and first paint stay tour-free.
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [seen, setSeen] = useState<string[]>([]);
+  // First visit opens the welcome. Runs after mount, so the server render and first paint stay overlay-free.
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
-    if (mode === "paper" && !tourDone()) setTouring(true);
+    setSeen(coachSeen());
+    if (mode === "paper" && !welcomeDone()) setWelcomeOpen(true);
   }, [mode]);
+  const closeWelcome = () => {
+    markWelcomeDone();
+    setWelcomeOpen(false);
+    document.getElementById("try")?.scrollIntoView({ block: "center" });
+  };
+  const replayTour = () => {
+    resetTour();
+    setSeen([]);
+    setWelcomeOpen(true);
+  };
+  const COACH: Record<string, { title: string; body: string }> = {
+    lend: { title: "Start here", body: "Lend 5 SPYx. You get cSPYx back, a receipt that earns." },
+    skip: { title: "Skip ahead", body: "Jump 30 days and watch the interest land on your receipt." },
+    withdraw: { title: "Collect your yield", body: "Withdraw to turn the interest into SPYx in your wallet." },
+  };
+  const coach = mode === "paper" && !welcomeOpen && !seen.includes(guide.step) ? COACH[guide.step] : undefined;
+  const dismissCoach = () => {
+    markCoachSeen(guide.step);
+    setSeen(coachSeen());
+  };
   const openAdvanced = (next: Tab) => {
     setTab(next);
     setAdvancedOpen(true);
@@ -166,6 +189,7 @@ export default function App() {
     }),
   };
 
+  const heroReceive = preview(() => fmt(receiptSharesForDeposit(10n * 10n ** 8n, view.receiptSupply, view.assets), 8));
   const liq = cairn.liquidation;
   const liqMax = liq.sample.maxRepay < view.wallet.spyx ? liq.sample.maxRepay : view.wallet.spyx;
   const liquidateProblem = !liq.sample.liquidatable
@@ -242,20 +266,21 @@ export default function App() {
           </div>
           <WalletChip wallet={view.wallet} label={mode === "live" ? "Your wallet" : "Paper wallet"} />
           {mode === "live" && <WalletMultiButton />}
-          <button type="button" className="nav-tour" onClick={() => setTouring(true)}>Tour</button>
+          <button type="button" className="nav-tour" onClick={replayTour}>Tour</button>
         </div>
       </nav>
 
       <section className="shell hero" id="top">
         <Reveal>
-          <div className="hero-copy" data-tour="intro">
+          <div className="hero-copy">
             <div className="eyebrow">Solana securities lending</div>
             <h1>The LST layer for tokenized equities</h1>
             <p>
-              Lend your tokenized stock. Earn the interest market makers pay to borrow it.
-              Your receipt, cSPYx, is worth more SPYx every day.
+              Deposit tokenized SPYx. Receive cSPYx. Market makers borrow the stock against USDC
+              and pay interest back to cSPYx holders.
             </p>
             <div className="hero-actions">
+              <a className="cta-primary" href="#try">Try it (paper trading) <span aria-hidden="true">↓</span></a>
               <a className="text-action" href={REPO_URL} target="_blank" rel="noreferrer">Source on GitHub <span>↗</span></a>
               {DEMO_VIDEO_URL
                 ? <a className="text-action" href={DEMO_VIDEO_URL} target="_blank" rel="noreferrer">Demo video <span>↗</span></a>
@@ -268,6 +293,41 @@ export default function App() {
         </Reveal>
 
         <Reveal delay={0.12}>
+          <div className="receipt-visual" aria-label="SPYx deposit becomes cSPYx">
+            <div className="receipt-topline">
+              <span>CAIRN RECEIPT</span>
+              <AnimatedBadge tone="safe">Eligible</AnimatedBadge>
+            </div>
+            <div className="receipt-symbol">cSPYx</div>
+            <div className="receipt-flow">
+              <div>
+                <span>Deposit</span>
+                <strong>10.0000 SPYx</strong>
+              </div>
+              <div className="flow-line" aria-hidden="true">
+                <span />
+              </div>
+              <div>
+                <span>Receive</span>
+                <strong>{heroReceive} cSPYx</strong>
+              </div>
+            </div>
+            <div className="receipt-rate">
+              <span>Exchange rate</span>
+              <strong>1 cSPYx = {view.exchangeRate.toFixed(6)} SPYx</strong>
+            </div>
+            <div className="receipt-foot">Yield accrues through the exchange rate, not rebases.</div>
+          </div>
+        </Reveal>
+      </section>
+
+      <section className="shell try-section" id="try" aria-label="Guided paper trading">
+        <div className="try-copy">
+          <div className="eyebrow">Guided path</div>
+          <h2>Lend, wait, withdraw.</h2>
+          <p>Four steps and about a minute. Follow the highlighted button. Your paper wallet in the navbar shows every change.</p>
+        </div>
+        <div>
           <GuideCard
             guide={guide}
             view={view}
@@ -279,7 +339,7 @@ export default function App() {
             onReset={cairn.reset}
           />
           {!advancedOpen && cairn.error && <p className="sandbox-error guide-error" role="alert">{cairn.error}</p>}
-        </Reveal>
+        </div>
       </section>
 
       <section className="shell stats" data-tour="stats" aria-label="SPYx market indicators">
@@ -596,7 +656,8 @@ export default function App() {
           </div>
         </div>
       </footer>
-      <Tour open={touring} onClose={() => setTouring(false)} />
+      <Welcome open={welcomeOpen} onClose={closeWelcome} />
+      {coach && <CoachMark key={guide.step} target='[data-coach="guide-primary"]' title={coach.title} body={coach.body} onDismiss={dismissCoach} />}
     </main>
   );
 }

@@ -242,6 +242,9 @@ export default function App() {
 
   return (
     <main>
+      {/* One sticky header: the paper ribbon and the navbar with the wallet chip, so the
+          balance stays in view everywhere on the page (TG 1735). */}
+      <header className="site-header">
       <SandboxRibbon
         mode={mode}
         day={day}
@@ -252,7 +255,8 @@ export default function App() {
         onAccrue={() => cairn.run("accrue")}
         busy={cairn.busy}
       />
-      <nav className="shell nav" aria-label="Primary navigation">
+      <nav className="nav-bar" aria-label="Primary navigation">
+        <div className="shell nav">
         <a className="brand" href="#top" aria-label="Cairn home">
           <span className="brand-mark">C</span>
           <span>Cairn</span>
@@ -268,7 +272,9 @@ export default function App() {
           {mode === "live" && <WalletMultiButton />}
           <button type="button" className="nav-tour" onClick={replayTour}>Tour</button>
         </div>
+        </div>
       </nav>
+      </header>
 
       <section className="shell hero" id="top">
         <Reveal>

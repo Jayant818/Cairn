@@ -50,7 +50,9 @@ export function CoachMark({
       const caretLeft = Math.max(16, Math.min(center - left, c.width - 16));
       let where: Place = "above";
       let top = t.top - c.height - GAP;
-      if (top < MARGIN + 70) { where = "below"; top = t.bottom + GAP; }
+      // The sticky header covers the top of the viewport; flip below if the card would sit under it.
+      const header = document.querySelector(".site-header")?.getBoundingClientRect().bottom ?? 0;
+      if (top < header + MARGIN) { where = "below"; top = t.bottom + GAP; }
       top = Math.max(MARGIN, Math.min(top, height - MARGIN - c.height));
       setAnchor({ left, top, caretLeft, place: where });
     };

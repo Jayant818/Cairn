@@ -28,6 +28,12 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+:root {
+  --header-h: 128px;
+}
+/* Anchor targets land below the sticky header, not under it. */
+[id] { scroll-margin-top: calc(var(--header-h) + 16px); }
+.site-header { position: sticky; top: 0; z-index: 30; background: var(--ink); box-shadow: 0 10px 24px #05070b99; }
 body { margin: 0; min-width: 320px; background: var(--ink); }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -47,7 +53,7 @@ h1, h2 { color: var(--text); font-variation-settings: "wdth" 112, "wght" 680; }
 h1 { max-width: 760px; font-size: clamp(54px, 7.3vw, 106px); line-height: .91; letter-spacing: -.055em; }
 h2 { font-size: clamp(34px, 4.4vw, 62px); line-height: .96; letter-spacing: -.045em; }
 
-.sandbox-ribbon { position: sticky; top: 0; z-index: 30; border-block: 1px solid #33466f; background: #0d1628f5; backdrop-filter: blur(14px); }
+.sandbox-ribbon { border-block: 1px solid #33466f; background: #0d1628; }
 .sandbox-ribbon-inner { width: min(1460px, calc(100% - 32px)); min-height: 64px; margin-inline: auto; display: flex; align-items: center; gap: 24px; }
 .sandbox-title { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
 .sandbox-title strong { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
@@ -70,7 +76,8 @@ h2 { font-size: clamp(34px, 4.4vw, 62px); line-height: .96; letter-spacing: -.04
 .ribbon-tools button:disabled { cursor: not-allowed; opacity: .5; }
 .ribbon-tools a { margin-left: 6px; color: #aebcff; font-family: var(--mono); font-size: 11px; text-underline-offset: 4px; }
 
-.nav { min-height: 86px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.nav-bar { border-bottom: 1px solid var(--line); background: var(--ink); }
+.nav { min-height: 62px; display: flex; align-items: center; justify-content: space-between; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-size: 20px; font-weight: 680; text-decoration: none; }
 .brand-mark {
   width: 30px;
@@ -373,7 +380,18 @@ h2 { font-size: clamp(34px, 4.4vw, 62px); line-height: .96; letter-spacing: -.04
 
 @media (max-width: 640px) {
   .shell { width: min(100% - 28px, 1180px); }
-  .nav { min-height: 72px; }
+  .nav { min-height: 54px; }
+  :root { --header-h: 100px; }
+  /* Keep the sticky header short on a phone: one scrolling row of ribbon tools. */
+  .sandbox-ribbon-inner { min-height: 0; padding-block: 6px; }
+  .ribbon-tools { width: 100%; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ribbon-tools button, .ribbon-tools a, .ribbon-tools span { flex: 0 0 auto; white-space: nowrap; }
+  .ribbon-tools button { min-height: 30px; padding-inline: 8px; }
+  .sandbox-ribbon .sandbox-title { display: none; }
+  /* The paper disclosure stays on screen: it leads the scrolling row on a phone. */
+  .ribbon-tools .paper-badge, .ribbon-tools .live-badge { order: -1; margin-left: 0; }
+  .nav-tour { min-height: 34px; }
+  .wallet-chip-button { min-height: 34px; }
   .nav-tools { gap: 8px; }
   .persona-switcher button { padding-inline: 8px; font-size: 0; }
   .persona-switcher button::after { content: "Retail"; font-size: 11px; }

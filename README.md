@@ -1,14 +1,27 @@
 # Cairn
 
-## The LST layer for tokenized equities
+**Market makers pay to borrow your tokenized stock. Cairn gives you a liquid receipt for it.**
+Deposit SPYx and receive **cSPYx**, a yield-bearing, liquid stock-lending receipt (a cToken,
+not staking). Short and hedge desks and directional USDC→SPYx borrowers pay the interest.
+Each cSPYx claims more SPYx over time.
 
-Cairn turns tokenized stocks into liquid, yield-bearing positions.
+## Why not Kamino or Kraken?
 
-Deposit SPYx. Receive **cSPYx**. Market makers borrow the deposited SPYx against
-USDC collateral. Their borrow interest increases the SPYx claim behind each
-cSPYx.
+| | What you get | What you give up |
+| --- | --- | --- |
+| **Kamino xStocks market** | 0.09% supply APY to SPYx lenders at 2.30% utilization (api.kamino.finance, read 2026-09-25) | Shared pool: SPYx lenders earn what that market's borrowers pay |
+| **Kraken xStocks vaults** | ~2% est. net APY on SPYx, after a 25% performance fee | Runs through Ink and Solana; 3-day withdrawal while the strategy unwinds; your position is a Kraken balance, not a token you hold |
+| **Cairn** | cSPYx: transferable, usable as collateral, redeemable from idle cash with no unwind queue | A young, unaudited program. Yield exists only when there are borrowers |
 
-> Deposit SPYx. Receive cSPYx. Earn stock-borrow yield while cSPYx stays liquid.
+**Who borrows:** short and hedge desks that need SPYx inventory, and directional borrowers who
+post USDC and borrow SPYx (a flow Kamino already supports). The rate follows the formula
+`supply APY = borrow rate × utilization × (1 − reserve)`, so the yield is exactly as large as
+real borrow demand.
+
+> [!WARNING]
+> **Admin power, disclosed:** `set_market_config` lets the market authority change the oracle
+> feeds, LTV, liquidation settings, and rates **immediately, with no timelock**. A timelock (or
+> a multisig) is on the list in [Next steps](#next-steps-after-the-hackathon).
 
 **Try it:** [stockpump-one.vercel.app](https://stockpump-one.vercel.app) — paper trading, no wallet needed.
 **Demo video:** coming soon. <!-- TODO(Jayant): add the demo video link here and in app/src/lib/links.ts -->
@@ -65,8 +78,8 @@ or `?mode=live` to choose a mode.
 | cSPYx holder | Holds or uses cSPYx in DeFi               | Earns the SPYx borrow rate                 |
 | Liquidator   | Repays unsafe debt                        | Receives discounted collateral            |
 
-cSPYx is a **liquid lending receipt**. “LST for stocks” is the simple product
-model. It is not validator staking. The yield comes from securities lending.
+cSPYx is a **yield-bearing, liquid stock-lending receipt**, like a cToken. It is not
+validator staking. The yield comes from securities lending.
 
 ## Product features
 
@@ -322,6 +335,14 @@ Current facts:
 - The deposit path revalidates mutable mint policy before accepting inventory.
 - `tests/cairn.spec.ts` passes the complete deposit, borrow, accrual, repay, and
   yield-positive redemption lifecycle against the cloned SPYx mint.
+- Debt is priced through the SPYx `ScaledUiAmount` multiplier (timestamp-gated
+  `newMultiplier`). Oracles quote a UI token, and one raw unit is `multiplier` UI tokens.
+  A 2:1 split leaves health unchanged, and a unit test proves it. The fork test fails
+  against the old program.
+- `write_off_bad_debt` is permissionless. It clears a position with no collateral left and
+  debt outstanding. Reserves take the first loss, lenders the rest through the rate.
+- Every vault account must be the market's associated token account. A second token
+  account owned by the market is rejected, and a fork test covers it.
 
 ## Build and test
 
@@ -466,6 +487,8 @@ holders can use.
 - Extend mutation testing from the math module to every instruction.
 - Set the program upgrade authority to a multisig and document the upgrade
   process.
+- Put a timelock on `set_market_config`. Today the market authority can change feeds, LTV,
+  and rates immediately.
 - Launch on mainnet with deposit caps, and raise the caps only after the
   audit and a period of stable operation.
 

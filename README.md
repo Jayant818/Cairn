@@ -31,9 +31,15 @@ opens in **paper mode**. You need no wallet, no RPC, and no funds.
 - You start with 25 SPYx and 10,000 USDC in a paper wallet. The market opens with
   fixture history: 1,000 SPYx deposited, 600 SPYx borrowed, and 30 days of
   accrued interest. Prices are the fork fixture prices (SPYx 200.00, USDC 1.00).
-- The ribbon at the top shows the full lifecycle: deposit, post USDC, borrow,
-  let 30 days pass, repay, and redeem. **+1 day** and **+30 days** move the paper
-  clock and run the `accrue_interest` crank. **Reset** starts a fresh market.
+- A first-visit tour explains the page. The **Tour** button in the navbar restarts it.
+- The guided card has one button per step: **Lend 5 SPYx**, **Skip 30 days**,
+  **Withdraw and see my profit**, then **Try the borrower side**. The navbar
+  wallet shows each change as it happens.
+- **Skip 1 day** and **Skip 30 days** move the paper clock and run the
+  `accrue_interest` crank. **Reset** starts a fresh market.
+- Custom amounts and the borrower side (post USDC, borrow, repay, withdraw)
+  are under **Try the borrower side and custom amounts**. Each action says why
+  it cannot run before you click.
 - The program's errors appear as the program reports them. Examples: a borrow
   above the loan-to-value limit fails with `UnhealthyPosition`, and a redemption
   above idle cash fails with `InsufficientLiquidity`.

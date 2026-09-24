@@ -17,11 +17,11 @@ import { coachSeen, markCoachSeen, markWelcomeDone, resetTour, welcomeDone } fro
 import { WalletChip } from "./components/WalletChip";
 import { YieldCurve } from "./components/YieldCurve";
 import { useCairn, type ActionName } from "./hooks/useCairn";
-import { assetsForReceipts, collateralForLiquidation, receiptSharesForDeposit } from "./lib/cairnMath";
+import { assetsForReceipts, collateralForLiquidation, receiptSharesForDeposit, scaleEquityPrice } from "./lib/cairnMath";
 import { recordedControls } from "./lib/issuerControls";
-import { DEMO_VIDEO_URL, REPO_URL, feedbackUrl } from "./lib/links";
+import { DEMO_VIDEO_URL, KAMINO_SPYX, REPO_URL, feedbackUrl } from "./lib/links";
 import { GUIDE_LABELS, guideOf } from "./lib/guide";
-import { GENESIS, PAPER_CONFIG, PAPER_SEEDED, fmt, healthyAt, parseAmount } from "./lib/paperMarket";
+import { GENESIS, PAPER_CONFIG, PAPER_SEEDED, SPYX_MULTIPLIER, fmt, healthyAt, parseAmount } from "./lib/paperMarket";
 import { recordedSource } from "./lib/source";
 
 type Tab = "Lend" | "Borrow" | "Liquidate";
@@ -274,10 +274,10 @@ export default function App() {
         <Reveal>
           <div className="hero-copy">
             <div className="eyebrow">Solana securities lending</div>
-            <h1>The LST layer for tokenized equities</h1>
+            <h1>Your S&amp;P 500 tokens, still working.</h1>
             <p>
-              Deposit tokenized SPYx. Receive cSPYx. Market makers borrow the stock against USDC
-              and pay interest back to cSPYx holders.
+              Deposit tokenized SPYx. Receive cSPYx, a yield-bearing, liquid stock-lending receipt.
+              Market makers borrow the stock against USDC and pay interest back to cSPYx holders.
             </p>
             <div className="hero-actions">
               <a className="cta-primary" href="#try">Try it (paper trading) <span aria-hidden="true">↓</span></a>
@@ -330,6 +330,7 @@ export default function App() {
         <div>
           <GuideCard
             guide={guide}
+            pricePerRaw={scaleEquityPrice(cairn.prices.equityMid, SPYX_MULTIPLIER)}
             view={view}
             live={mode === "live"}
             onLend={() => cairn.run("deposit", toInput(guide.lendAmount, 8))}
@@ -346,13 +347,27 @@ export default function App() {
         <dl className="kpi-bar">
           <div><dt>Total managed equity</dt><dd>{fmt(view.assets, 8, 2)} SPYx</dd><p>All the SPYx lenders put in, plus interest owed to them.</p></div>
           <div><dt>Pool utilization</dt><dd><AnimatedNumber value={view.utilizationPct} precision={2} />%</dd><p>How much of the pool is lent out now. More demand, more yield.</p></div>
-          <div><dt>Lender APY</dt><dd><AnimatedNumber value={view.lenderApyPct} precision={2} />%</dd><p>What a lender earns per year at today's demand.</p></div>
+          <div><dt>Lender APY</dt><dd><AnimatedNumber value={view.lenderApyPct} precision={2} />%</dd><p>Simulated demand. See the formula below.</p></div>
           <div><dt>Exchange rate</dt><dd>1 cSPYx = {view.exchangeRate.toFixed(6)} SPYx</dd><p>What your receipt is worth. It only goes up.</p></div>
         </dl>
+        <div className="yield-panel" aria-label="Where the yield comes from">
+          <div className="yield-formula">
+            <span>supply APY = borrow rate × utilization × (1 − reserve)</span>
+            <strong>
+              {view.lenderApyPct.toFixed(2)}% = {view.borrowApyPct.toFixed(2)}% × {view.utilizationPct.toFixed(2)}% × {(1 - Number(cairn.config.reserveFactorBps) / 10_000).toFixed(2)}
+            </strong>
+            <small>{mode === "paper" ? "Simulated demand scenario" : "Live fork market"}</small>
+          </div>
+          <div className="yield-reference">
+            <span>Live reference</span>
+            <strong>Kamino SPYx today: {KAMINO_SPYX.utilization} utilization, {KAMINO_SPYX.supplyApy} supply APY</strong>
+            <small>{KAMINO_SPYX.source}, read {KAMINO_SPYX.readAt}. Real demand is low today. The yield grows only with borrowers.</small>
+          </div>
+        </div>
         {mode === "paper" && (
           <p className="stats-note">
             {PAPER_SEEDED
-              ? "Simulated market: 1 sample lender (1,000 SPYx) + 1 sample borrower (600 SPYx), 30 days of history. Your actions change it."
+              ? "Simulated demand scenario: 1 sample lender (1,000 SPYx) + 1 sample borrower (600 SPYx), 30 days of history. Your actions change it."
               : "Simulated market: empty. With no borrower, lenders earn 0%."}
           </p>
         )}
@@ -651,7 +666,7 @@ export default function App() {
         <div className="shell footer-inner">
           <div>
             <span className="brand footer-brand"><span className="brand-mark">C</span>Cairn</span>
-            <p>The LST layer for tokenized equities.</p>
+            <p>Your S&amp;P 500 tokens, still working.</p>
           </div>
           <div>
             <span>V2 program</span>

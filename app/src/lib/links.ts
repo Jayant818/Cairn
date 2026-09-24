@@ -1,6 +1,15 @@
 import type { MarketView } from "./paperMarket";
 
 export const REPO_URL = "https://github.com/Jayant818/Cairn";
+// Read at the object: api.kamino.finance/kamino-market/5wJeMrUY…ULsua/reserves/metrics (xStocks
+// Market), SPYx reserve. totalBorrow 125.2 / totalSupply 5,454.1 = 2.30%; supplyApy 0.000898.
+export const KAMINO_SPYX = {
+  utilization: "2.30%",
+  supplyApy: "0.09%",
+  source: "api.kamino.finance",
+  readAt: "2026-09-25",
+};
+
 // TODO(Jayant): paste the demo video URL here. The page shows "coming soon" while it is empty.
 export const DEMO_VIDEO_URL = "";
 

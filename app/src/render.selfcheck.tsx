@@ -14,8 +14,12 @@ const must = (value: string, reason: string) => {
   if (!html.includes(value)) throw new Error(`MISSING: ${reason} (${value})`);
 };
 
-must("The LST layer for tokenized equities", "product tagline");
-must("PAPER — simulated, no real funds", "paper badge in the sticky ribbon");
+must("Your S&amp;P 500 tokens, still working.", "benefit-first headline (TG 1720)");
+must("yield-bearing, liquid stock-lending receipt", "correct category term");
+must("supply APY = borrow rate × utilization × (1 − reserve)", "yield as a function, on screen");
+must("Kamino SPYx today", "live reference beside the simulated scenario");
+must("Simulated demand scenario", "simulated utilization is labelled");
+must("Paper trading · simulated, no real funds", "paper badge, smaller, still truthful");
 must("Try it (paper trading)", "primary call to action");
 must("Found a problem?", "feedback path");
 must("https://github.com/Jayant818/Cairn/issues/new?", "feedback opens a prefilled GitHub issue");
@@ -37,7 +41,7 @@ must("Step 1 of 4", "guided path progress");
 must("Lend 5 SPYx", "one primary button for the first step");
 must("For you:", "plain-English line under the action");
 must("Skip 30 days", "time folded into skip buttons");
-must("Simulated market: 1 sample lender", "the sample data is labelled");
+must("Simulated demand scenario: 1 sample lender", "the sample data is labelled");
 must("What your receipt is worth. It only goes up.", "plain-English line under each stat");
 must("Try the borrower side and custom amounts", "advanced actions collapsed");
 must("Lend, wait, withdraw.", "guided section under the hero");

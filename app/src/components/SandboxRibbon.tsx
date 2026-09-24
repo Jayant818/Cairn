@@ -16,9 +16,6 @@ export function SandboxRibbon({ mode, day, progress, feedbackHref, onAdvance, on
     <section className="sandbox-ribbon" aria-label="Cairn trading mode">
       <div className="sandbox-ribbon-inner">
         <div className="sandbox-title">
-          {mode === "paper"
-            ? <strong className="paper-badge">PAPER — simulated, no real funds</strong>
-            : <strong className="live-badge">LIVE — local fork, wallet-signed</strong>}
           <small>{progress}</small>
         </div>
         <div className="ribbon-tools">
@@ -33,6 +30,9 @@ export function SandboxRibbon({ mode, day, progress, feedbackHref, onAdvance, on
             <button type="button" disabled={busy} onClick={onAccrue}>Accrue interest</button>
           )}
           <a href={feedbackHref} target="_blank" rel="noreferrer">Found a problem?</a>
+          {mode === "paper"
+            ? <span className="paper-badge">Paper trading · simulated, no real funds</span>
+            : <span className="live-badge">Live · local fork, wallet-signed</span>}
         </div>
       </div>
     </section>

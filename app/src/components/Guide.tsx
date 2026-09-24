@@ -1,9 +1,16 @@
 import { GUIDE_LABELS, type Guide } from "../lib/guide";
 import { fmt, type MarketView } from "../lib/paperMarket";
+
+// Simulated dollar value of a raw SPYx amount at the paper oracle price (per raw unit).
+const usd = (raw: bigint, pricePerRaw: bigint) => {
+  const cents = (raw * pricePerRaw) / 10n ** 8n / 10n ** 10n;
+  return `$${(Number(cents) / 100).toFixed(2)}`;
+};
 import { MotionButton } from "./MotionUI";
 
 type GuideProps = {
   guide: Guide;
+  pricePerRaw: bigint;
   view: MarketView;
   live: boolean;
   onLend: () => void;
@@ -13,11 +20,8 @@ type GuideProps = {
   onReset: () => void;
 };
 
-export function GuideCard({ guide, view, live, onLend, onSkip, onWithdraw, onBorrowerSide, onReset }: GuideProps) {
+export function GuideCard({ guide, pricePerRaw, view, live, onLend, onSkip, onWithdraw, onBorrowerSide, onReset }: GuideProps) {
   const rate = view.exchangeRate.toFixed(6);
-  const apy = guide.days > 0 && guide.deposited > 0n
-    ? (Number(guide.profit) / Number(guide.deposited)) * (365 / guide.days) * 100
-    : 0;
 
   let title: string;
   let body: string;
@@ -26,25 +30,25 @@ export function GuideCard({ guide, view, live, onLend, onSkip, onWithdraw, onBor
   switch (guide.step) {
     case "lend":
       title = `Lend ${fmt(guide.lendAmount, 8, 0)} SPYx`;
-      body = "You deposit tokenized S&P 500 stock. Cairn gives you cSPYx, a receipt you can hold or trade.";
-      forYou = "For you: your stock starts earning the interest that market makers pay to borrow it.";
+      body = "You deposit tokenized S&P 500 stock. Cairn gives you cSPYx: your SPYx, still liquid, now lent out.";
+      forYou = "For you: you keep a transferable receipt, and market makers pay interest to borrow the stock.";
       action = { label: `Lend ${fmt(guide.lendAmount, 8, 0)} SPYx`, run: onLend };
       break;
     case "skip":
       title = `You hold ${fmt(view.wallet.cspyx, 8)} cSPYx`;
-      body = `cSPYx is your receipt. Each one is worth ${rate} SPYx today, and that number only goes up as borrowers pay interest.`;
-      forYou = "For you: skip ahead to see a month of interest land on your receipt.";
+      body = `cSPYx is your SPYx in receipt form. You can transfer it, use it as collateral, or redeem it from idle cash, with no 3-day unwind. Each one is worth ${rate} SPYx today, and that only goes up.`;
+      forYou = "For you: skip ahead to see a month of borrower interest land on your receipt.";
       action = { label: "Skip 30 days", run: onSkip };
       break;
     case "withdraw":
-      title = `Your cSPYx is now worth ${fmt(view.receiptValue, 8)} SPYx`;
+      title = `Your cSPYx is now worth ${fmt(view.receiptValue, 8)} SPYx (${usd(view.receiptValue, pricePerRaw)})`;
       body = `You put in ${fmt(guide.deposited, 8)} SPYx. Withdraw to burn the receipt and get your stock back with interest.`;
       forYou = "For you: this is the moment the yield becomes real SPYx in your wallet.";
       action = { label: "Withdraw and see my profit", run: onWithdraw };
       break;
     default:
-      title = `You earned +${fmt(guide.profit, 8)} SPYx`;
-      body = `On ${fmt(guide.deposited, 8, 0)} SPYx over ${Math.round(guide.days)} simulated days${apy > 0 ? `, about ${apy.toFixed(2)}% a year` : ""}. Market makers paid it to borrow the stock.`;
+      title = `Your SPYx is back, plus ${fmt(guide.profit, 8)} SPYx`;
+      body = `That is +${usd(guide.profit, pricePerRaw)} in ${Math.round(guide.days)} simulated days on ${fmt(guide.deposited, 8, 0)} SPYx, paid by market makers who borrowed it. For the whole month your position stayed a liquid receipt. How much it earns depends on borrow demand (see the yield formula).`;
       forYou = "Next: see the other side. A market maker posts USDC and borrows SPYx.";
       action = { label: "Try the borrower side", run: onBorrowerSide };
   }

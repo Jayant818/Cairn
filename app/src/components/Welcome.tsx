@@ -4,15 +4,15 @@ const SLIDES = [
   {
     id: "welcome",
     title: "Welcome to Cairn",
-    body: "Lend tokenized stock and earn what market makers pay to borrow it.",
+    body: "Your S&P 500 tokens, still working. Lend SPYx and keep a liquid receipt while market makers borrow it.",
     note: "This is paper trading: no wallet, no real funds.",
     visual: ["SPYx", "Cairn", "Market makers"],
   },
   {
     id: "earn",
-    title: "How you earn",
-    body: "You deposit SPYx and get cSPYx, a receipt. Borrowers pay interest into the pool, so each cSPYx is worth more SPYx over time.",
-    note: "You never receive a rebase. The receipt's value goes up.",
+    title: "What you hold",
+    body: "cSPYx is your SPYx in receipt form: transferable, usable as collateral, and redeemable from idle cash with no 3-day unwind. Borrowers pay interest into the pool, so each cSPYx is worth more SPYx over time.",
+    note: "The yield depends on borrow demand. The page shows the formula.",
     visual: ["Lend SPYx", "Hold cSPYx", "Withdraw more SPYx"],
   },
   {

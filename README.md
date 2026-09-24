@@ -23,7 +23,7 @@ real borrow demand.
 > feeds, LTV, liquidation settings, and rates **immediately, with no timelock**. A timelock (or
 > a multisig) is on the list in [Next steps](#next-steps-after-the-hackathon).
 
-**Try it:** [stockpump-one.vercel.app](https://stockpump-one.vercel.app) — paper trading, no wallet needed.
+**Try it:** [cairn-sol.vercel.app](https://cairn-sol.vercel.app) — paper trading, no wallet needed.
 **Demo video:** coming soon. <!-- TODO(Jayant): add the demo video link here and in app/src/lib/links.ts -->
 
 > [!IMPORTANT]
@@ -32,7 +32,7 @@ real borrow demand.
 
 ## Try it (paper trading)
 
-Open [stockpump-one.vercel.app](https://stockpump-one.vercel.app). The page
+Open [cairn-sol.vercel.app](https://cairn-sol.vercel.app). The page
 opens in **paper mode**. You need no wallet, no RPC, and no funds.
 
 - Paper mode runs the SPYx market in your browser. It uses a bigint port of

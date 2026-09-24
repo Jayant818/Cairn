@@ -1,6 +1,7 @@
 import type { MarketView } from "./paperMarket";
 
 export const REPO_URL = "https://github.com/Jayant818/Cairn";
+export const SITE_URL = "https://cairn-sol.vercel.app";
 // Read at the object: api.kamino.finance/kamino-market/5wJeMrUY…ULsua/reserves/metrics (xStocks
 // Market), SPYx reserve. totalBorrow 125.2 / totalSupply 5,454.1 = 2.30%; supplyApy 0.000898.
 export const KAMINO_SPYX = {
@@ -32,6 +33,7 @@ export function feedbackUrl({ mode, day, view, error, recent }: FeedbackContext)
     "",
     "---",
     "Context (filled in by the page):",
+    `- page: ${SITE_URL}`,
     `- mode: ${mode}`,
     `- paper clock: ${day}`,
     `- exchange rate: ${view.exchangeRate.toFixed(8)} SPYx per cSPYx`,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import {
   AnimatedBadge,
@@ -9,13 +9,18 @@ import {
   SwapPanel,
 } from "./components/MotionUI";
 import { Feed, type FeedRow } from "./components/Feed";
-import { SandboxRibbon, type GuideStep } from "./components/SandboxRibbon";
+import { GuideCard } from "./components/Guide";
+import { SandboxRibbon } from "./components/SandboxRibbon";
+import { Tour } from "./components/Tour";
+import { tourDone } from "./lib/tourStore";
+import { WalletChip } from "./components/WalletChip";
 import { YieldCurve } from "./components/YieldCurve";
 import { useCairn, type ActionName } from "./hooks/useCairn";
 import { assetsForReceipts, receiptSharesForDeposit } from "./lib/cairnMath";
 import { recordedControls } from "./lib/issuerControls";
 import { DEMO_VIDEO_URL, REPO_URL, feedbackUrl } from "./lib/links";
-import { PAPER_CONFIG, fmt, parseAmount } from "./lib/paperMarket";
+import { GUIDE_LABELS, guideOf } from "./lib/guide";
+import { GENESIS, PAPER_CONFIG, PAPER_SEEDED, fmt, healthyAt, parseAmount } from "./lib/paperMarket";
 import { recordedSource } from "./lib/source";
 
 type Tab = "Lend" | "Borrow";
@@ -53,6 +58,7 @@ function OpRow({
   button,
   onSubmit,
   disabled,
+  problem,
   variant = "primary",
 }: {
   id: string;
@@ -65,6 +71,7 @@ function OpRow({
   button: string;
   onSubmit: () => void;
   disabled: boolean;
+  problem: string | null;
   variant?: "primary" | "secondary";
 }) {
   return (
@@ -76,8 +83,8 @@ function OpRow({
         <span>{unit}</span>
       </div>
       <div className="op-foot">
-        <small>{hint}</small>
-        <MotionButton variant={variant} onClick={onSubmit} disabled={disabled}>{button}</MotionButton>
+        <small className={problem && value.trim() ? "op-problem" : ""}>{problem && value.trim() ? problem : hint}</small>
+        <MotionButton variant={variant} onClick={onSubmit} disabled={disabled || Boolean(problem)}>{button}</MotionButton>
       </div>
     </div>
   );
@@ -99,29 +106,63 @@ export default function App() {
   const act = (name: keyof typeof amounts) => () => cairn.run(name, amounts[name]);
   const locked = cairn.busy || !cairn.ready || (mode === "live" && !cairn.connected);
 
-  const kinds = new Set(cairn.events.map((event) => event.kind));
-  const steps: GuideStep[] = [
-    { label: "Deposit SPYx", done: kinds.has("deposit"), target: "Lend" },
-    { label: "Post USDC", done: kinds.has("collateral"), target: "Borrow" },
-    { label: "Borrow SPYx", done: kinds.has("borrow"), target: "Borrow" },
-    { label: mode === "paper" ? "Let 30 days pass" : "Accrue interest", done: kinds.has("time"), target: "time" },
-    { label: "Repay", done: kinds.has("repay"), target: "Borrow" },
-    { label: "Redeem cSPYx", done: kinds.has("redeem"), target: "Lend" },
-  ];
-  const onStep = (target: GuideStep["target"]) => {
-    if (target === "time") {
-      if (mode === "paper") cairn.advance(30);
-      else cairn.run("accrue");
-      return;
-    }
-    setTab(target);
-    document.getElementById("market")?.scrollIntoView({ behavior: "smooth" });
+  const guide = guideOf(cairn.events, view);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [touring, setTouring] = useState(false);
+  // First visit opens the tour. Runs after mount, so server render and first paint stay tour-free.
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (mode === "paper" && !tourDone()) setTouring(true);
+  }, [mode]);
+  const openAdvanced = (next: Tab) => {
+    setTab(next);
+    setAdvancedOpen(true);
+    requestAnimationFrame(() => document.getElementById("market")?.scrollIntoView({ behavior: "smooth" }));
+  };
+  const day = Number((cairn.now - GENESIS) / 86_400n);
+  const progress = guide.completed === 4
+    ? "Guided path done"
+    : `Step ${guide.completed + 1} of 4 — ${GUIDE_LABELS[guide.completed]}`;
+
+  // Each action says why it cannot run BEFORE the click. The program would reject the same inputs.
+  const tryParse = (value: string, decimals: number) => {
+    try { return parseAmount(value, decimals); } catch { return null; }
+  };
+  const need = (value: string, decimals: number, check: (raw: bigint) => string | null) => {
+    const raw = tryParse(value, decimals);
+    return raw === null ? "Enter an amount above zero." : check(raw);
+  };
+  const problems = {
+    deposit: need(amounts.deposit, 8, (raw) => raw > view.wallet.spyx ? `You have ${fmt(view.wallet.spyx, 8)} SPYx. Use Max.` : null),
+    redeem: need(amounts.redeem, 8, (raw) => {
+      if (raw > view.wallet.cspyx) return `You hold ${fmt(view.wallet.cspyx, 8)} cSPYx. Use Max.`;
+      try {
+        if (assetsForReceipts(raw, view.receiptSupply, view.assets) > view.cash) return "The pool has too little idle SPYx. A borrower must repay first.";
+      } catch { return "You hold no cSPYx yet. Lend SPYx first."; }
+      return null;
+    }),
+    collateral: need(amounts.collateral, 6, (raw) => raw > view.wallet.usdc ? `You have ${fmt(view.wallet.usdc, 6, 2)} USDC. Use Max.` : null),
+    borrow: need(amounts.borrow, 8, (raw) => {
+      if (view.positionCollateral === 0n) return "Post USDC collateral first.";
+      return raw > view.maxBorrow ? `Your limit is ${fmt(view.maxBorrow, 8)} SPYx. Post more USDC or borrow less.` : null;
+    }),
+    repay: need(amounts.repay, 8, (raw) => {
+      if (view.positionDebt === 0n) return "You have no debt to repay.";
+      if (raw > view.positionDebt) return `You owe ${fmt(view.positionDebt, 8)} SPYx. Use Max.`;
+      return raw > view.wallet.spyx ? `You have ${fmt(view.wallet.spyx, 8)} SPYx. Use Max.` : null;
+    }),
+    withdraw: need(amounts.withdraw, 6, (raw) => {
+      if (raw > view.positionCollateral) return `You posted ${fmt(view.positionCollateral, 6, 2)} USDC.`;
+      if (view.positionDebt > 0n && !healthyAt(view.positionCollateral - raw, view.positionDebt, cairn.config.loanToValueBps)) {
+        return "That would break the 50% loan limit. Repay first or withdraw less.";
+      }
+      return null;
+    }),
   };
 
-  const clock = dateOf(cairn.now);
   const feedbackHref = feedbackUrl({
     mode,
-    day: clock,
+    day: `day ${day} (${dateOf(cairn.now)})`,
     view,
     error: cairn.error,
     recent: cairn.events.slice(0, 5).map((event) => event.message),
@@ -135,7 +176,6 @@ export default function App() {
     const out = assetsForReceipts(parseAmount(amounts.redeem, 8), view.receiptSupply, view.assets);
     return `${fmt(out, 8)} SPYx${out > view.cash ? " · exceeds available liquidity" : ""}`;
   });
-  const heroReceive = preview(() => fmt(receiptSharesForDeposit(10n * 10n ** 8n, view.receiptSupply, view.assets), 8));
   const repayMax = view.positionDebt < view.wallet.spyx ? view.positionDebt : view.wallet.spyx;
   const health = view.healthFactor;
 
@@ -159,10 +199,9 @@ export default function App() {
     <main>
       <SandboxRibbon
         mode={mode}
-        clock={clock}
-        steps={steps}
+        day={day}
+        progress={progress}
         feedbackHref={feedbackHref}
-        onStep={onStep}
         onAdvance={cairn.advance}
         onReset={cairn.reset}
         onAccrue={() => cairn.run("accrue")}
@@ -180,23 +219,22 @@ export default function App() {
             <a href="#risk">Risk gate</a>
             <a href={REPO_URL} target="_blank" rel="noreferrer">GitHub</a>
           </div>
-          {mode === "live"
-            ? <WalletMultiButton />
-            : <span className="paper-wallet">Paper wallet</span>}
+          <WalletChip wallet={view.wallet} label={mode === "live" ? "Your wallet" : "Paper wallet"} />
+          {mode === "live" && <WalletMultiButton />}
+          <button type="button" className="nav-tour" onClick={() => setTouring(true)}>Tour</button>
         </div>
       </nav>
 
       <section className="shell hero" id="top">
         <Reveal>
-          <div className="hero-copy">
+          <div className="hero-copy" data-tour="intro">
             <div className="eyebrow">Solana securities lending</div>
             <h1>The LST layer for tokenized equities</h1>
             <p>
-              Deposit tokenized SPYx. Receive cSPYx. Market makers borrow the stock against USDC
-              and pay interest back to cSPYx holders.
+              Lend your tokenized stock. Earn the interest market makers pay to borrow it.
+              Your receipt, cSPYx, is worth more SPYx every day.
             </p>
             <div className="hero-actions">
-              <a className="cta-primary" href="#market">Try it (paper trading) <span aria-hidden="true">↓</span></a>
               <a className="text-action" href={REPO_URL} target="_blank" rel="noreferrer">Source on GitHub <span>↗</span></a>
               {DEMO_VIDEO_URL
                 ? <a className="text-action" href={DEMO_VIDEO_URL} target="_blank" rel="noreferrer">Demo video <span>↗</span></a>
@@ -209,42 +247,46 @@ export default function App() {
         </Reveal>
 
         <Reveal delay={0.12}>
-          <div className="receipt-visual" aria-label="SPYx deposit becomes cSPYx">
-            <div className="receipt-topline">
-              <span>CAIRN RECEIPT</span>
-              <AnimatedBadge tone="safe">Eligible</AnimatedBadge>
-            </div>
-            <div className="receipt-symbol">cSPYx</div>
-            <div className="receipt-flow">
-              <div>
-                <span>Deposit</span>
-                <strong>10.0000 SPYx</strong>
-              </div>
-              <div className="flow-line" aria-hidden="true">
-                <span />
-              </div>
-              <div>
-                <span>Receive</span>
-                <strong>{heroReceive} cSPYx</strong>
-              </div>
-            </div>
-            <div className="receipt-rate">
-              <span>Exchange rate</span>
-              <strong>1 cSPYx = {view.exchangeRate.toFixed(6)} SPYx</strong>
-            </div>
-            <div className="receipt-foot">Yield accrues through the exchange rate, not rebases.</div>
-          </div>
+          <GuideCard
+            guide={guide}
+            view={view}
+            live={mode === "live"}
+            onLend={() => cairn.run("deposit", toInput(guide.lendAmount, 8))}
+            onSkip={() => cairn.advance(30)}
+            onWithdraw={() => cairn.run("redeem", toInput(view.wallet.cspyx, 8))}
+            onBorrowerSide={() => openAdvanced("Borrow")}
+            onReset={cairn.reset}
+          />
+          {!advancedOpen && cairn.error && <p className="sandbox-error guide-error" role="alert">{cairn.error}</p>}
         </Reveal>
       </section>
 
-      <dl className="shell kpi-bar" aria-label="SPYx market indicators">
-        <div><dt>Total managed equity</dt><dd>{fmt(view.assets, 8, 2)} SPYx</dd></div>
-        <div><dt>Pool utilization</dt><dd><AnimatedNumber value={view.utilizationPct} precision={2} />%</dd></div>
-        <div><dt>Lender APY</dt><dd><AnimatedNumber value={view.lenderApyPct} precision={2} />%</dd></div>
-        <div><dt>Exchange rate</dt><dd>1 cSPYx = {view.exchangeRate.toFixed(6)} SPYx</dd></div>
-      </dl>
+      <section className="shell stats" data-tour="stats" aria-label="SPYx market indicators">
+        <dl className="kpi-bar">
+          <div><dt>Total managed equity</dt><dd>{fmt(view.assets, 8, 2)} SPYx</dd><p>All the SPYx lenders put in, plus interest owed to them.</p></div>
+          <div><dt>Pool utilization</dt><dd><AnimatedNumber value={view.utilizationPct} precision={2} />%</dd><p>How much of the pool is lent out now. More demand, more yield.</p></div>
+          <div><dt>Lender APY</dt><dd><AnimatedNumber value={view.lenderApyPct} precision={2} />%</dd><p>What a lender earns per year at today's demand.</p></div>
+          <div><dt>Exchange rate</dt><dd>1 cSPYx = {view.exchangeRate.toFixed(6)} SPYx</dd><p>What your receipt is worth. It only goes up.</p></div>
+        </dl>
+        {mode === "paper" && (
+          <p className="stats-note">
+            {PAPER_SEEDED
+              ? "Simulated market: 1 sample lender (1,000 SPYx) + 1 sample borrower (600 SPYx), 30 days of history. Your actions change it."
+              : "Simulated market: empty. With no borrower, lenders earn 0%."}
+          </p>
+        )}
+      </section>
 
-      <section className="market-band" id="market">
+      <details
+        className="market-band advanced"
+        id="market"
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen((event.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="shell advanced-summary">
+          <span>Try the borrower side and custom amounts</span>
+          <small>Post USDC, borrow SPYx, repay, and lend any amount.</small>
+        </summary>
         <div className="shell market-layout">
           <div className="market-copy">
             <div className="eyebrow">{mode === "paper" ? "Paper market" : "Live market"}</div>
@@ -276,7 +318,7 @@ export default function App() {
                   </button>
                 </p>
               )}
-              {cairn.error && <p className="sandbox-error" role="alert">{cairn.error}</p>}
+              {advancedOpen && cairn.error && <p className="sandbox-error" role="alert">{cairn.error}</p>}
               {cairn.transactionUrl && <a href={cairn.transactionUrl} target="_blank" rel="noreferrer">Inspect latest transaction ↗</a>}
             </section>
           </div>
@@ -311,6 +353,7 @@ export default function App() {
                     button="Deposit & mint cSPYx"
                     onSubmit={act("deposit")}
                     disabled={locked}
+                    problem={problems.deposit}
                   />
                   <OpRow
                     id="redeem-amount"
@@ -323,6 +366,7 @@ export default function App() {
                     button="Burn cSPYx for SPYx"
                     onSubmit={act("redeem")}
                     disabled={locked}
+                    problem={problems.redeem}
                     variant="secondary"
                   />
                 </div>
@@ -339,6 +383,7 @@ export default function App() {
                     button="Post collateral"
                     onSubmit={act("collateral")}
                     disabled={locked}
+                    problem={problems.collateral}
                   />
                   <OpRow
                     id="borrow-amount"
@@ -351,6 +396,7 @@ export default function App() {
                     button="Borrow SPYx"
                     onSubmit={act("borrow")}
                     disabled={locked}
+                    problem={problems.borrow}
                   />
                   <OpRow
                     id="repay-amount"
@@ -363,6 +409,7 @@ export default function App() {
                     button="Repay"
                     onSubmit={act("repay")}
                     disabled={locked}
+                    problem={problems.repay}
                     variant="secondary"
                   />
                   <OpRow
@@ -376,6 +423,7 @@ export default function App() {
                     button="Withdraw"
                     onSubmit={act("withdraw")}
                     disabled={locked}
+                    problem={problems.withdraw}
                     variant="secondary"
                   />
                 </div>
@@ -388,7 +436,7 @@ export default function App() {
             </p>
           </div>
         </div>
-      </section>
+      </details>
 
       <section className="shell curve-section">
         <YieldCurve config={cairn.config} utilization={view.utilizationPct} />
@@ -468,6 +516,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      <Tour open={touring} onClose={() => setTouring(false)} />
     </main>
   );
 }

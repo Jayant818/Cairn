@@ -278,6 +278,65 @@ h2 { font-size: clamp(34px, 4.4vw, 62px); line-height: .96; letter-spacing: -.04
 .footer-inner p, .footer-inner strong { color: #b0b6c0; font-size: 12px; font-weight: 400; }
 .footer-brand { margin-bottom: 5px; }
 
+
+/* Wallet chip: always visible, flashes on every balance change. */
+.wallet-chip { position: relative; padding: 8px 12px; display: grid; gap: 3px; border: 1px solid #7891ff; background: #121c33; box-shadow: 3px 3px 0 #111b38; font-family: var(--mono); transition: background .3s, border-color .3s; }
+.wallet-chip-label { color: #aebcff; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.wallet-chip-values { display: flex; gap: 12px; color: #d6ddf0; font-size: 12px; white-space: nowrap; }
+.wallet-chip-values strong { color: white; font-weight: 500; }
+.wallet-chip-delta { position: absolute; top: calc(100% + 6px); right: 0; padding: 0 2px; color: var(--paper); font-size: 11px; white-space: nowrap; }
+.wallet-chip-flash { border-color: var(--paper); background: #1d2c52; animation: chip-pulse .9s ease-out 2; }
+@keyframes chip-pulse { 0% { box-shadow: 0 0 0 0 #f0ecdf88; } 100% { box-shadow: 0 0 0 10px #f0ecdf00; } }
+.nav-tour { min-height: 40px; padding-inline: 12px; border: 1px solid #36415a; background: transparent; color: #d6ddf0; font-family: var(--mono); font-size: 12px; cursor: pointer; }
+.nav-tour:hover { border-color: #7891ff; }
+.ribbon-day { padding-inline: 6px; color: var(--paper); font-family: var(--mono); font-size: 12px; }
+
+/* Guided path: one primary button per step. */
+.guide-card { padding: 26px; display: grid; gap: 16px; border: 1px solid #7891ff; background: #0d1422; box-shadow: 14px 14px 0 #182442; }
+.guide-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.guide-count { color: #aebcff; font-family: var(--mono); font-size: 12px; }
+.guide-steps { margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; list-style: none; }
+.guide-steps li { padding: 8px 6px; display: flex; align-items: center; gap: 7px; border-top: 3px solid #2b3240; color: #8f99aa; font-family: var(--mono); font-size: 11px; }
+.guide-steps li span { width: 18px; height: 18px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid #4d5a75; font-size: 10px; }
+.guide-steps .guide-done { border-top-color: #7891ff; color: #d6ddf0; }
+.guide-steps .guide-now { border-top-color: var(--paper); color: white; }
+.guide-steps .guide-now span { border-color: var(--paper); background: var(--paper); color: var(--paper-text); }
+.guide-card h2 { font-size: clamp(28px, 3.2vw, 40px); }
+.guide-card .guide-profit { color: var(--paper); }
+.guide-body { color: #c3c9d3; font-size: 16px; line-height: 1.5; }
+.guide-card .motion-button { min-height: 58px; font-size: 17px; }
+.guide-for-you { color: #9da7b4; font-family: var(--mono); font-size: 12px; line-height: 1.55; }
+.guide-blocked { color: var(--orange); }
+.guide-error { margin-top: 14px; font-family: var(--mono); font-size: 12px; }
+
+.stats { padding-bottom: 8px; }
+.stats .kpi-bar p { margin-top: 7px; color: #9aa3b0; font-size: 13px; line-height: 1.45; }
+.stats-note { padding: 12px 0 4px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+.advanced { padding-block: 0; }
+.advanced[open] { padding-bottom: 108px; }
+.advanced-summary { padding-block: 34px; display: grid; gap: 6px; cursor: pointer; list-style: none; }
+.advanced-summary::-webkit-details-marker { display: none; }
+.advanced-summary span { color: var(--text); font-size: clamp(22px, 2.4vw, 30px); font-variation-settings: "wdth" 112, "wght" 620; }
+.advanced-summary span::after { content: "  ▸"; color: #7891ff; }
+.advanced[open] .advanced-summary span::after { content: "  ▾"; }
+.advanced-summary small { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.advanced[open] .market-layout { padding-top: 20px; }
+.op-foot .op-problem { color: var(--orange); }
+
+/* Walkthrough */
+.tour-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+.tour-ring { position: fixed; border: 2px solid var(--paper); box-shadow: 0 0 0 9999px #05070bcc; transition: all .25s ease; }
+.tour-card { position: fixed; width: min(340px, calc(100vw - 24px)); padding: 18px; display: grid; gap: 10px; border: 1px solid var(--paper); background: var(--ink-raised); color: var(--text); box-shadow: 6px 6px 0 #182442; pointer-events: auto; }
+.tour-card-above { transform: translateY(-100%); }
+.tour-card h3 { margin: 0; font-size: 20px; }
+.tour-card p { color: #c3c9d3; font-size: 14px; line-height: 1.5; }
+.tour-count { color: #aebcff; font-family: var(--mono); font-size: 11px; }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-actions span { display: flex; gap: 8px; }
+.tour-back, .tour-next { min-height: 38px; padding-inline: 14px; border: 1px solid #7891ff; background: transparent; color: white; font-family: var(--mono); font-size: 12px; cursor: pointer; }
+.tour-next { background: var(--cobalt-deep); }
+
 @media (max-width: 900px) {
   .hero, .market-layout, .risk-layout, .architecture { grid-template-columns: 1fr; }
   .hero { padding-block: 68px 90px; }
@@ -291,6 +350,7 @@ h2 { font-size: clamp(34px, 4.4vw, 62px); line-height: .96; letter-spacing: -.04
   .scenario-steps { width: 100%; grid-template-columns: repeat(3, 1fr); }
   .ribbon-tools { flex-wrap: wrap; white-space: normal; }
   .nav-links, .persona-switcher > span { display: none; }
+  .guide-card { box-shadow: 8px 8px 0 #182442; }
   .sandbox-ledger { grid-template-columns: 1fr 1fr; }
 }
 
@@ -307,6 +367,18 @@ h2 { font-size: clamp(34px, 4.4vw, 62px); line-height: .96; letter-spacing: -.04
   .scenario-steps li { flex: 0 0 auto; }
   .scenario-steps button { min-height: 34px; white-space: nowrap; }
   .sandbox-title small { display: none; }
+  .nav { gap: 8px; }
+  .wallet-chip { padding: 6px 8px; }
+  .wallet-chip-label { display: none; }
+  .wallet-chip-values { gap: 8px; font-size: 11px; flex-direction: column; gap: 1px; }
+  .wallet-chip-delta { right: auto; left: 0; }
+  .brand > span:last-child { display: none; }
+  .guide-card { padding: 18px; }
+  /* On a phone the next action must be on the first screen, so the guide comes before the headline. */
+  .hero { padding-block: 24px 64px; gap: 36px; }
+  .hero > div:nth-child(2) { order: -1; }
+  .guide-steps { grid-template-columns: 1fr 1fr; }
+  .ribbon-day { display: none; }
   .op-foot { align-items: stretch; flex-direction: column; }
   .market-copy .sandbox-ledger { grid-template-columns: 1fr; }
   .cta-primary { width: 100%; justify-content: space-between; }

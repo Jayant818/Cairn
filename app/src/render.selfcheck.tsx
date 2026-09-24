@@ -31,6 +31,16 @@ must("Inactive only", "active transfer hook rejection");
 must("No borrower loops.", "constant-time accounting claim");
 must("Paper mode: every action runs in your browser", "paper disclosure");
 must("Not on devnet or mainnet yet", "deployment status");
+// 2026-09-24 UX pass (Jayant TG 1685/1687): the founder could not find the next action.
+must("Paper wallet", "wallet chip in the navbar");
+must("Step 1 of 4", "guided path progress");
+must("Lend 5 SPYx", "one primary button for the first step");
+must("For you:", "plain-English line under the action");
+must("Skip 30 days", "time folded into skip buttons");
+must("Simulated market: 1 sample lender", "the sample data is labelled");
+must("What your receipt is worth. It only goes up.", "plain-English line under each stat");
+must("Try the borrower side and custom amounts", "advanced actions collapsed");
+if (/Clock \d{4}-\d{2}-\d{2}/.test(plain)) throw new Error("the Clock <date> label is back");
 
 // Moved 2026-09-24: the page used to print scripted figures (1,420.50 SPYx, 68.2%, 1.0215, 31.8%).
 // Every number now comes from viewOf(), so none of those literals may come back.

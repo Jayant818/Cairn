@@ -8,6 +8,7 @@ export const INDEX_SCALE = 1_000_000_000_000_000_000n;
 export const PRICE_SCALE = 1_000_000_000_000n;
 export const SECONDS_PER_YEAR = 31_536_000n;
 export const U64_MAX = (1n << 64n) - 1n;
+export const MULTIPLIER_SCALE = 1_000_000_000_000n;
 
 export const ERRORS = {
   MathOverflow: "arithmetic overflow",
@@ -23,6 +24,8 @@ export const ERRORS = {
   RepayTooSmall: "repayment rounds to zero debt shares",
   InvalidOraclePrice: "oracle price is invalid",
   PositionHealthy: "position is healthy",
+  InvalidScaledUiMultiplier: "equity mint UI multiplier is invalid",
+  PositionNotBadDebt: "position is not bad debt: it still has collateral or has no debt",
   LiquidationTooSmall: "liquidation produced no collateral",
   UnsupportedOracleExponent: "oracle exponent is outside the supported range",
 } as const;
@@ -176,4 +179,29 @@ export function collateralForLiquidation(
   const repayValue = tokenValue(repaidEquity, equityDecimals, equityPrice);
   const withBonus = mulDivFloor(repayValue, BPS_DENOM + bonusBps, BPS_DENOM);
   return u64(mulDivFloor(withBonus, 10n ** BigInt(collateralDecimals), collateralPrice));
+}
+
+// ScaledUiAmount: the mint's multiplier at `now`. Mirrors math::effective_multiplier.
+export function effectiveMultiplier(multiplier: number, newMultiplier: number, newEffectiveAt: bigint, now: bigint) {
+  return now >= newEffectiveAt ? newMultiplier : multiplier;
+}
+
+// f64 -> fixed point, rounded up. Mirrors math::multiplier_fixed (same f64 arithmetic).
+export function multiplierFixed(multiplier: number) {
+  if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1_000_000) {
+    throw new CairnError("InvalidScaledUiMultiplier");
+  }
+  return BigInt(Math.ceil(multiplier * Number(MULTIPLIER_SCALE)));
+}
+
+// Debt is in raw units, oracles quote UI tokens: price x multiplier, rounded up.
+export function scaleEquityPrice(price: bigint, multiplier: bigint) {
+  return mulDivCeil(price, multiplier, MULTIPLIER_SCALE);
+}
+
+// Mirrors math::write_off: (new total debt shares, new reserves). Reserves take the first loss.
+export function writeOff(totalDebtShares: bigint, positionShares: bigint, collateral: bigint, debt: bigint, reserves: bigint): [bigint, bigint] {
+  if (collateral !== 0n || positionShares === 0n) throw new CairnError("PositionNotBadDebt");
+  if (positionShares > totalDebtShares) throw new CairnError("MathOverflow");
+  return [totalDebtShares - positionShares, reserves > debt ? reserves - debt : 0n];
 }

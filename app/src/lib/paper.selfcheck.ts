@@ -15,6 +15,12 @@ import {
   receiptSharesForDeposit,
   sharesForBorrow,
   sharesForRepayment,
+  MULTIPLIER_SCALE,
+  effectiveMultiplier,
+  multiplierFixed,
+  positionIsHealthy,
+  scaleEquityPrice,
+  writeOff,
 } from "./cairnMath";
 import {
   PAPER_CONFIG,
@@ -34,6 +40,7 @@ import {
   liquidationLimits,
   movePrice,
   pricesFor,
+  writeOffSample,
   type PaperState,
 } from "./paperMarket";
 import { guideOf } from "./guide";
@@ -86,6 +93,23 @@ eq(sharesForBorrow(1n, HALF_UP), 1n, "borrow shares ceil (1/1.5)");
 eq(debtForShares(1n, INDEX_SCALE / 2n), 1n, "debt ceil (0.5)");
 eq(sharesForRepayment(1n, 10n, HALF_UP), 0n, "partial repayment shares floor");
 eq(accrueIndex(INDEX_SCALE, 999n, SECONDS_PER_YEAR, 1_000n, 9_999n)[1], 99n, "new debt ceil 1098.9 -> 1099, reserve floor 99.99");
+
+// ScaledUiAmount and write-off: the same vectors as the Rust tests in math.rs.
+eq(effectiveMultiplier(1.003909240011759, 1.005714560286254, 1_781_755_200n, 1_781_755_199n), 1.003909240011759, "multiplier before effective time");
+eq(effectiveMultiplier(1.003909240011759, 1.005714560286254, 1_781_755_200n, 1_781_755_200n), 1.005714560286254, "multiplier at effective time");
+eq(multiplierFixed(1), MULTIPLIER_SCALE, "multiplier 1.0 fixed point");
+eq(scaleEquityPrice(200n * PRICE_SCALE, multiplierFixed(1.005714560286254)), 201_142_912_057_400n, "debt valued at the multiplier");
+{
+  const before = scaleEquityPrice(200n * PRICE_SCALE, multiplierFixed(1));
+  const after = scaleEquityPrice(100n * PRICE_SCALE, multiplierFixed(2));
+  eq(before, after, "2:1 split leaves the raw debt price unchanged");
+  for (const debt of [100_000_000n, 249_000_000n, 250_000_000n, 251_000_000n, 400_000_000n]) {
+    eq(positionIsHealthy(1_000_000_000n, debt, 6, 8, PRICE_SCALE, before, 5_000n), positionIsHealthy(1_000_000_000n, debt, 6, 8, PRICE_SCALE, after, 5_000n), `split health ${debt}`);
+  }
+}
+eq(writeOff(1_000n, 300n, 0n, 50n, 20n).join(), "700,0", "write-off: reserves exhausted");
+eq(writeOff(1_000n, 300n, 0n, 50n, 80n).join(), "700,30", "write-off: reserves first loss");
+rejects(() => writeOff(1_000n, 300n, 1n, 50n, 80n), "PositionNotBadDebt", "write-off with collateral");
 
 // Paper market: the seeded fixture market already earned 30 days of interest.
 const start = genesisState();
@@ -167,4 +191,19 @@ eq(crowded.market.cash, cash, "failed redeem left state untouched");
   if (!(own.position.collateral < 10_000n * USDC)) throw new Error("own liquidation did not seize collateral");
 }
 
-console.log("paper selfcheck PASS: 5 math.rs vectors, 6 rounding vectors, lifecycle, LTV, repay and liquidity guards, guided path, liquidation");
+// Bad debt end to end: SPYx triples, liquidations take all of the sample borrower's collateral,
+// the debt that is left is written off, and the cSPYx rate falls to reflect the loss.
+{
+  let b: PaperState = movePrice(genesisState(), 200n);
+  b = { ...b, wallet: { ...b.wallet, spyx: 10_000n * SPYX } };
+  rejects(() => writeOffSample(b), "PositionNotBadDebt", "write-off while collateral remains");
+  for (let i = 0; i < 40 && b.sample.collateral > 0n; i++) b = liquidateSample(b, liquidationLimits(b, b.sample).maxRepay);
+  eq(b.sample.collateral, 0n, "liquidations took all the collateral");
+  if (!(b.sample.debtShares > 0n)) throw new Error("expected bad debt after the collateral ran out");
+  const rateBefore = viewOf(b.market, b.position, b.wallet).exchangeRate;
+  b = writeOffSample(b);
+  eq(b.sample.debtShares, 0n, "write-off clears the position");
+  if (!(viewOf(b.market, b.position, b.wallet).exchangeRate < rateBefore)) throw new Error("write-off did not lower the cSPYx rate");
+}
+
+console.log("paper selfcheck PASS: 5 math.rs vectors, 6 rounding vectors, lifecycle, LTV, repay and liquidity guards, guided path, liquidation, multiplier, bad debt");

@@ -14,7 +14,10 @@ import {
   debtForShares,
   managedAssets,
   mulDivCeil,
+  multiplierFixed,
   normalizedPrice,
+  scaleEquityPrice,
+  writeOff,
   positionIsHealthy,
   receiptSharesForDeposit,
   sharesForBorrow,
@@ -57,13 +60,17 @@ export const FIXTURE_PRICES = {
 // validate_prices: debt is priced at the upper bound, collateral at the lower bound.
 export type Prices = { equityDebt: bigint; collateral: bigint; equityMid: bigint };
 
+// SPYx mainnet ScaledUiAmount newMultiplier (live since 2026-06-18). The program prices raw
+// debt at oracle price x this multiplier, and so does paper mode.
+export const SPYX_MULTIPLIER = multiplierFixed(1.005714560286254);
+
 // The paper oracle: SPYx can move, USDC stays at the fixture. Confidence keeps the
 // fixture's 0.05% ratio, so the confidence and deviation checks would still pass.
 export function pricesFor(equityPrice = FIXTURE_PRICES.equity.price): Prices {
   const { equity, collateral } = FIXTURE_PRICES;
   const conf = (equityPrice * equity.conf) / equity.price;
   return {
-    equityDebt: normalizedPrice(equityPrice, conf, equity.expo, true),
+    equityDebt: scaleEquityPrice(normalizedPrice(equityPrice, conf, equity.expo, true), SPYX_MULTIPLIER),
     collateral: normalizedPrice(collateral.price, collateral.conf, collateral.expo, false),
     equityMid: normalizedPrice(equityPrice, 0n, equity.expo, false),
   };
@@ -363,6 +370,20 @@ export function liquidationLimits(state: PaperState, target: Position) {
   const debt = debtForShares(target.debtShares, market.borrowIndex);
   const liquidatable = debt > 0n && !healthyAt(target.collateral, debt, PAPER_CONFIG.liquidationThresholdBps, prices);
   return { debt, liquidatable, maxRepay: mulDivCeil(debt, PAPER_CONFIG.closeFactorBps, BPS_DENOM) };
+}
+
+// write_off_bad_debt in lib.rs: permissionless, only for a position with no collateral and
+// debt left. Debt shares leave the market; reserves take the first loss, lenders the rest.
+function writeOffCore(state: PaperState, target: Position) {
+  const market = accrued(state.market, state.now);
+  const debt = debtForShares(target.debtShares, market.borrowIndex);
+  const [totalDebtShares, reserves] = writeOff(market.totalDebtShares, target.debtShares, target.collateral, debt, market.reserves);
+  return { market: { ...market, totalDebtShares, reserves }, target: { ...target, debtShares: 0n }, debt };
+}
+
+export function writeOffSample(state: PaperState): PaperState {
+  const { market, target, debt } = writeOffCore(state, state.sample);
+  return log({ ...state, market, sample: target }, "liquidate", `Wrote off ${fmt(debt, 8)} SPYx of the sample borrower's bad debt. The cSPYx rate absorbed the loss.`);
 }
 
 // The user acts as the liquidator of the sample market maker: pays SPYx, takes USDC plus the bonus.

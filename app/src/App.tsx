@@ -563,6 +563,13 @@ export default function App() {
                         problem={liquidateProblem}
                         alwaysShowProblem
                       />
+                      {cairn.sampleView.positionCollateral === 0n && cairn.sampleView.positionDebt > 0n && (
+                        <div className="risk-panel risk-panel-danger">
+                          <strong>Bad debt: {fmt(cairn.sampleView.positionDebt, 8)} SPYx with no collateral left.</strong>
+                          <p>Anyone can write it off. Reserves take the first loss and the cSPYx rate absorbs the rest now, so the last lenders out are not the ones left holding it.</p>
+                          <MotionButton variant="secondary" onClick={cairn.writeOffSample}>Write off bad debt</MotionButton>
+                        </div>
+                      )}
                       <p className="microcopy">A liquidator repays part of an unhealthy loan and takes the borrower's USDC at a discount. That keeps lenders whole.</p>
                     </>
                   )}

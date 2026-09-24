@@ -40,6 +40,8 @@ must("Skip 30 days", "time folded into skip buttons");
 must("Simulated market: 1 sample lender", "the sample data is labelled");
 must("What your receipt is worth. It only goes up.", "plain-English line under each stat");
 must("Try the borrower side and custom amounts", "advanced actions collapsed");
+must("SPYx price (paper oracle)", "paper oracle control for liquidation");
+must("Liquidate", "liquidation tab");
 if (/Clock \d{4}-\d{2}-\d{2}/.test(plain)) throw new Error("the Clock <date> label is back");
 
 // Moved 2026-09-24: the page used to print scripted figures (1,420.50 SPYx, 68.2%, 1.0215, 31.8%).

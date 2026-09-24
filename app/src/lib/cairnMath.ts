@@ -22,6 +22,8 @@ export const ERRORS = {
   RepayTooLarge: "repayment exceeds the current debt",
   RepayTooSmall: "repayment rounds to zero debt shares",
   InvalidOraclePrice: "oracle price is invalid",
+  PositionHealthy: "position is healthy",
+  LiquidationTooSmall: "liquidation produced no collateral",
   UnsupportedOracleExponent: "oracle exponent is outside the supported range",
 } as const;
 

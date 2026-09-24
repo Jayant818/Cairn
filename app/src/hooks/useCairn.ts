@@ -13,7 +13,13 @@ import {
   deposit,
   depositCollateral,
   genesisState,
+  liquidateOwn,
+  liquidateSample,
+  liquidationLimits,
   loadState,
+  movePrice,
+  pricesFor,
+  resetPrice,
   parseAmount,
   redeem,
   repay,
@@ -66,7 +72,8 @@ const paperActions = {
 function restorePaper(): PaperState {
   const saved = loadState();
   try {
-    if (saved && typeof saved.now === "bigint" && Array.isArray(saved.events)) {
+    if (saved && typeof saved.now === "bigint" && Array.isArray(saved.events)
+      && typeof saved.equityPrice === "bigint" && saved.sample) {
       viewOf(saved.market, saved.position, saved.wallet);
       return saved;
     }
@@ -160,6 +167,16 @@ export function useCairn() {
     setPaper((current) => advanceTime(current, BigInt(days) * 86_400n));
   }, []);
 
+  // Paper-only market events: the oracle move and liquidations. Each reports its program error.
+  const paperOnly = useCallback((apply: (state: PaperState) => PaperState) => {
+    setError(null);
+    try {
+      setPaper(apply(paper));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [paper]);
+
   const reset = useCallback(() => {
     clearState();
     setError(null);
@@ -180,7 +197,14 @@ export function useCairn() {
   }, [wallet.publicKey, refreshLive]);
 
   const source = mode === "live" && live ? live : { ...paper, config: PAPER_CONFIG };
-  const view = viewOf(source.market, source.position, source.wallet, source.config);
+  const prices = mode === "live" ? pricesFor() : pricesFor(paper.equityPrice);
+  const view = viewOf(source.market, source.position, source.wallet, source.config, prices);
+  const empty = { spyx: 0n, usdc: 0n, cspyx: 0n };
+  const sampleView = viewOf(paper.market, paper.sample, empty, PAPER_CONFIG, prices);
+  const liquidation = {
+    own: liquidationLimits(paper, paper.position),
+    sample: liquidationLimits(paper, paper.sample),
+  };
   const events: PaperEvent[] = mode === "paper" ? paper.events : [];
 
   return {
@@ -195,6 +219,14 @@ export function useCairn() {
     error,
     transactionUrl: signature ? explorerTransactionUrl(signature, connection.rpcEndpoint) : null,
     run: (name: ActionName, value = "") => void run(name, value),
+    equityPrice: mode === "live" ? null : paper.equityPrice,
+    prices,
+    sampleView,
+    liquidation,
+    movePrice: (percent: number) => paperOnly((s) => movePrice(s, BigInt(percent))),
+    resetPrice: () => paperOnly(resetPrice),
+    liquidateSample: (amount: bigint) => paperOnly((s) => liquidateSample(s, amount)),
+    liquidateOwn: () => paperOnly(liquidateOwn),
     advance,
     reset,
     seed,

@@ -16,14 +16,14 @@ import { tourDone } from "./lib/tourStore";
 import { WalletChip } from "./components/WalletChip";
 import { YieldCurve } from "./components/YieldCurve";
 import { useCairn, type ActionName } from "./hooks/useCairn";
-import { assetsForReceipts, receiptSharesForDeposit } from "./lib/cairnMath";
+import { assetsForReceipts, collateralForLiquidation, receiptSharesForDeposit } from "./lib/cairnMath";
 import { recordedControls } from "./lib/issuerControls";
 import { DEMO_VIDEO_URL, REPO_URL, feedbackUrl } from "./lib/links";
 import { GUIDE_LABELS, guideOf } from "./lib/guide";
 import { GENESIS, PAPER_CONFIG, PAPER_SEEDED, fmt, healthyAt, parseAmount } from "./lib/paperMarket";
 import { recordedSource } from "./lib/source";
 
-type Tab = "Lend" | "Borrow";
+type Tab = "Lend" | "Borrow" | "Liquidate";
 
 const spyxControls = recordedControls.find((mint) => mint.symbol === "SPYx")!;
 const replay = recordedSource;
@@ -59,6 +59,7 @@ function OpRow({
   onSubmit,
   disabled,
   problem,
+  alwaysShowProblem = false,
   variant = "primary",
 }: {
   id: string;
@@ -72,6 +73,7 @@ function OpRow({
   onSubmit: () => void;
   disabled: boolean;
   problem: string | null;
+  alwaysShowProblem?: boolean;
   variant?: "primary" | "secondary";
 }) {
   return (
@@ -83,7 +85,10 @@ function OpRow({
         <span>{unit}</span>
       </div>
       <div className="op-foot">
-        <small className={problem && value.trim() ? "op-problem" : ""}>{problem && value.trim() ? problem : hint}</small>
+        {(() => {
+          const show = problem && (alwaysShowProblem || value.trim());
+          return <small className={show ? "op-problem" : ""}>{show ? problem : hint}</small>;
+        })()}
         <MotionButton variant={variant} onClick={onSubmit} disabled={disabled || Boolean(problem)}>{button}</MotionButton>
       </div>
     </div>
@@ -94,16 +99,17 @@ export default function App() {
   const cairn = useCairn();
   const { view, mode } = cairn;
   const [tab, setTab] = useState<Tab>("Lend");
-  const [amounts, setAmounts] = useState<Record<Exclude<ActionName, "accrue">, string>>({
+  const [amounts, setAmounts] = useState<Record<Exclude<ActionName, "accrue"> | "liquidate", string>>({
     deposit: "10",
     redeem: "",
     collateral: "2000",
     borrow: "4",
     repay: "",
     withdraw: "",
+    liquidate: "",
   });
   const set = (name: keyof typeof amounts) => (value: string) => setAmounts((current) => ({ ...current, [name]: value }));
-  const act = (name: keyof typeof amounts) => () => cairn.run(name, amounts[name]);
+  const act = (name: Exclude<keyof typeof amounts, "liquidate">) => () => cairn.run(name, amounts[name]);
   const locked = cairn.busy || !cairn.ready || (mode === "live" && !cairn.connected);
 
   const guide = guideOf(cairn.events, view);
@@ -153,12 +159,27 @@ export default function App() {
     }),
     withdraw: need(amounts.withdraw, 6, (raw) => {
       if (raw > view.positionCollateral) return `You posted ${fmt(view.positionCollateral, 6, 2)} USDC.`;
-      if (view.positionDebt > 0n && !healthyAt(view.positionCollateral - raw, view.positionDebt, cairn.config.loanToValueBps)) {
+      if (view.positionDebt > 0n && !healthyAt(view.positionCollateral - raw, view.positionDebt, cairn.config.loanToValueBps, cairn.prices)) {
         return "That would break the 50% loan limit. Repay first or withdraw less.";
       }
       return null;
     }),
   };
+
+  const liq = cairn.liquidation;
+  const liqMax = liq.sample.maxRepay < view.wallet.spyx ? liq.sample.maxRepay : view.wallet.spyx;
+  const liquidateProblem = !liq.sample.liquidatable
+    ? `The sample borrower is healthy (health ${cairn.sampleView.healthFactor?.toFixed(3) ?? "—"}). Move the SPYx price up first.`
+    : need(amounts.liquidate, 8, (raw) => {
+      if (raw > liq.sample.maxRepay) return `The close factor caps one repay at ${fmt(liq.sample.maxRepay, 8)} SPYx. Use Max.`;
+      return raw > view.wallet.spyx ? `You have ${fmt(view.wallet.spyx, 8)} SPYx. Use Max.` : null;
+    });
+  const liquidatePreview = preview(() => {
+    const seize = collateralForLiquidation(
+      parseAmount(amounts.liquidate, 8), 8, 6, cairn.prices.equityDebt, cairn.prices.collateral, cairn.config.liquidationBonusBps,
+    );
+    return `≈ ${fmt(seize, 6, 2)} USDC (includes the ${pct(cairn.config.liquidationBonusBps)} bonus)`;
+  });
 
   const feedbackHref = feedbackUrl({
     mode,
@@ -338,7 +359,22 @@ export default function App() {
               <div><span>Freeze Authority</span><strong title={spyxControls.freeze ?? ""}>Issuer-controlled, mirrored</strong></div>
               <div><span>Mint Close Authority</span><strong>Disabled</strong></div>
             </div>
-            <MotionTabs value={tab} options={["Lend", "Borrow"] as const} onChange={setTab} />
+            {mode === "paper" && cairn.equityPrice !== null && (
+              <div className="oracle-row" aria-label="Paper oracle">
+                <div>
+                  <span>SPYx price (paper oracle)</span>
+                  <strong>${fmt(cairn.equityPrice, 8, 2)}</strong>
+                </div>
+                <div className="oracle-buttons">
+                  <button type="button" onClick={() => cairn.movePrice(-10)}>−10%</button>
+                  <button type="button" onClick={() => cairn.movePrice(10)}>+10%</button>
+                  <button type="button" onClick={() => cairn.movePrice(25)}>+25%</button>
+                  <button type="button" onClick={cairn.resetPrice}>Reset</button>
+                </div>
+                <small>Debt is in SPYx, collateral in USDC. When SPYx rises, borrowers get closer to liquidation.</small>
+              </div>
+            )}
+            <MotionTabs value={tab} options={["Lend", "Borrow", "Liquidate"] as const} onChange={setTab} />
             <SwapPanel panelKey={tab}>
               {tab === "Lend" ? (
                 <div className="action-panel">
@@ -370,7 +406,7 @@ export default function App() {
                     variant="secondary"
                   />
                 </div>
-              ) : (
+              ) : tab === "Borrow" ? (
                 <div className="action-panel">
                   <OpRow
                     id="collateral-amount"
@@ -426,8 +462,52 @@ export default function App() {
                     problem={problems.withdraw}
                     variant="secondary"
                   />
+                  {view.positionDebt > 0n && (
+                    <div className={`risk-panel${liq.own.liquidatable ? " risk-panel-danger" : ""}`}>
+                      {liq.own.liquidatable ? (
+                        <>
+                          <strong>Your position can be liquidated (health {health?.toFixed(3)}).</strong>
+                          <p>Anyone may repay up to {fmt(liq.own.maxRepay, 8)} SPYx of your debt and take that value in your USDC, plus a {pct(cairn.config.liquidationBonusBps)} bonus.</p>
+                          <MotionButton variant="secondary" onClick={cairn.liquidateOwn} disabled={mode !== "paper"}>Let a liquidator act</MotionButton>
+                        </>
+                      ) : (
+                        <p>Health {health?.toFixed(3)}. Below 1.000, anyone can liquidate you. Try the SPYx price +25% above to see it happen.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
+              ) : tab === "Liquidate" ? (
+                <div className="action-panel">
+                  {mode !== "paper" ? (
+                    <p className="microcopy">Liquidation runs in paper mode. Open the page with ?mode=paper.</p>
+                  ) : (
+                    <>
+                      <div className="risk-panel">
+                        <strong>Sample borrower</strong>
+                        <p>
+                          Debt {fmt(cairn.sampleView.positionDebt, 8, 2)} SPYx · collateral {fmt(cairn.sampleView.positionCollateral, 6, 0)} USDC ·
+                          health {cairn.sampleView.healthFactor?.toFixed(3) ?? "—"}
+                        </p>
+                      </div>
+                      <OpRow
+                        id="liquidate-amount"
+                        label="Repay their SPYx debt"
+                        unit="SPYx"
+                        value={amounts.liquidate}
+                        onChange={set("liquidate")}
+                        max={liq.sample.liquidatable ? toInput(liqMax, 8) : null}
+                        hint={`You get ${liquidatePreview}`}
+                        button="Liquidate"
+                        onSubmit={() => { const raw = tryParse(amounts.liquidate, 8); if (raw !== null) cairn.liquidateSample(raw); }}
+                        disabled={locked}
+                        problem={liquidateProblem}
+                        alwaysShowProblem
+                      />
+                      <p className="microcopy">A liquidator repays part of an unhealthy loan and takes the borrower's USDC at a discount. That keeps lenders whole.</p>
+                    </>
+                  )}
+                </div>
+              ) : null}
             </SwapPanel>
             <p className="microcopy action-note">
               {mode === "paper"

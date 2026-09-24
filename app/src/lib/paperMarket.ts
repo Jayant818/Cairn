@@ -3,14 +3,17 @@
 // order: accrue first, then the same checks, then the same state updates.
 // Token balances stand in for the SPL accounts. Prices are the fork fixture prices.
 import {
+  BPS_DENOM,
   CairnError,
   INDEX_SCALE,
   U64_MAX,
   accrueIndex,
   assetsForReceipts,
   borrowRateBps,
+  collateralForLiquidation,
   debtForShares,
   managedAssets,
+  mulDivCeil,
   normalizedPrice,
   positionIsHealthy,
   receiptSharesForDeposit,
@@ -52,11 +55,21 @@ export const FIXTURE_PRICES = {
 };
 
 // validate_prices: debt is priced at the upper bound, collateral at the lower bound.
-export const PRICES = {
-  equityDebt: normalizedPrice(FIXTURE_PRICES.equity.price, FIXTURE_PRICES.equity.conf, FIXTURE_PRICES.equity.expo, true),
-  collateral: normalizedPrice(FIXTURE_PRICES.collateral.price, FIXTURE_PRICES.collateral.conf, FIXTURE_PRICES.collateral.expo, false),
-  equityMid: normalizedPrice(FIXTURE_PRICES.equity.price, 0n, FIXTURE_PRICES.equity.expo, false),
-};
+export type Prices = { equityDebt: bigint; collateral: bigint; equityMid: bigint };
+
+// The paper oracle: SPYx can move, USDC stays at the fixture. Confidence keeps the
+// fixture's 0.05% ratio, so the confidence and deviation checks would still pass.
+export function pricesFor(equityPrice = FIXTURE_PRICES.equity.price): Prices {
+  const { equity, collateral } = FIXTURE_PRICES;
+  const conf = (equityPrice * equity.conf) / equity.price;
+  return {
+    equityDebt: normalizedPrice(equityPrice, conf, equity.expo, true),
+    collateral: normalizedPrice(collateral.price, collateral.conf, collateral.expo, false),
+    equityMid: normalizedPrice(equityPrice, 0n, equity.expo, false),
+  };
+}
+
+export const PRICES = pricesFor();
 
 export type MarketState = {
   cash: bigint;
@@ -72,7 +85,8 @@ export type Wallet = { spyx: bigint; usdc: bigint; cspyx: bigint };
 export type Position = { collateral: bigint; debtShares: bigint };
 
 export type PaperEventKind =
-  | "deposit" | "redeem" | "collateral" | "withdraw" | "borrow" | "repay" | "accrue" | "time";
+  | "deposit" | "redeem" | "collateral" | "withdraw" | "borrow" | "repay" | "accrue" | "time"
+  | "price" | "liquidate";
 
 export type PaperEvent = {
   seq: number;
@@ -90,6 +104,10 @@ export type PaperState = {
   position: Position;
   now: bigint;
   events: PaperEvent[];
+  // The sample market maker's position, so it can be liquidated like any other.
+  sample: Position;
+  // SPYx price at exponent -8. Only the paper oracle moves it.
+  equityPrice: bigint;
 };
 
 // 2026-09-26 00:00 UTC. The clock only moves when the user advances it.
@@ -109,6 +127,8 @@ function emptyMarket(): PaperState {
     position: { collateral: 0n, debtShares: 0n },
     now: GENESIS,
     events: [],
+    sample: { collateral: 0n, debtShares: 0n },
+    equityPrice: FIXTURE_PRICES.equity.price,
   };
 }
 
@@ -130,6 +150,8 @@ export function genesisState(seeded = PAPER_SEEDED): PaperState {
     position: { collateral: 0n, debtShares: 0n },
     now: GENESIS - 30n * DAY,
     events: [],
+    sample: { collateral: 0n, debtShares: 0n },
+    equityPrice: FIXTURE_PRICES.equity.price,
   };
   state = deposit(state, 1_000n * SPYX);
   state = depositCollateral(state, 250_000n * USDC);
@@ -141,6 +163,7 @@ export function genesisState(seeded = PAPER_SEEDED): PaperState {
     ...state,
     wallet: { spyx: 25n * SPYX, usdc: 10_000n * USDC, cspyx: 0n },
     position: { collateral: 0n, debtShares: 0n },
+    sample: state.position,
     events: [],
   };
 }
@@ -220,7 +243,7 @@ export function withdrawCollateral(state: PaperState, amount: bigint): PaperStat
   const market = accrued(state.market, state.now);
   const remaining = state.position.collateral - amount;
   const debt = debtForShares(state.position.debtShares, market.borrowIndex);
-  if (debt > 0n && !healthyAt(remaining, debt, PAPER_CONFIG.loanToValueBps)) {
+  if (debt > 0n && !healthyAt(remaining, debt, PAPER_CONFIG.loanToValueBps, pricesFor(state.equityPrice))) {
     throw new CairnError("UnhealthyPosition");
   }
   const next = {
@@ -240,7 +263,7 @@ export function borrow(state: PaperState, amount: bigint): PaperState {
   const added = sharesForBorrow(amount, market.borrowIndex);
   const positionShares = state.position.debtShares + added;
   const positionDebt = debtForShares(positionShares, market.borrowIndex);
-  if (!healthyAt(state.position.collateral, positionDebt, PAPER_CONFIG.loanToValueBps)) {
+  if (!healthyAt(state.position.collateral, positionDebt, PAPER_CONFIG.loanToValueBps, pricesFor(state.equityPrice))) {
     throw new CairnError("UnhealthyPosition");
   }
   const next = {
@@ -288,10 +311,75 @@ export function ratesAt(config: MarketConfig, utilizationPct: number) {
   return { borrow, lender };
 }
 
-export function healthyAt(collateral: bigint, debt: bigint, thresholdBps: bigint) {
+export function healthyAt(collateral: bigint, debt: bigint, thresholdBps: bigint, prices = PRICES) {
   return positionIsHealthy(
-    collateral, debt, COLLATERAL_DECIMALS, EQUITY_DECIMALS, PRICES.collateral, PRICES.equityDebt, thresholdBps,
+    collateral, debt, COLLATERAL_DECIMALS, EQUITY_DECIMALS, prices.collateral, prices.equityDebt, thresholdBps,
   );
+}
+
+// Paper oracle move, in percent of the current SPYx price.
+export function movePrice(state: PaperState, percent: bigint): PaperState {
+  const next = (state.equityPrice * (100n + percent)) / 100n;
+  if (next <= 0n) throw new CairnError("InvalidOraclePrice");
+  return log({ ...state, equityPrice: next }, "price", `SPYx price moved ${percent > 0n ? "+" : ""}${percent}% to $${fmt(next, 8, 2)}.`);
+}
+
+export function resetPrice(state: PaperState): PaperState {
+  return log({ ...state, equityPrice: FIXTURE_PRICES.equity.price }, "price", `SPYx price reset to $${fmt(FIXTURE_PRICES.equity.price, 8, 2)}.`);
+}
+
+// liquidate in lib.rs: accrue, require UNHEALTHY at the liquidation threshold, cap the repay
+// at the close factor, remove debt shares, seize collateral with the bonus (capped at what exists).
+function liquidateCore(state: PaperState, target: Position, amount: bigint) {
+  if (amount <= 0n) throw new CairnError("ZeroAmount");
+  const market = accrued(state.market, state.now);
+  const prices = pricesFor(state.equityPrice);
+  const debt = debtForShares(target.debtShares, market.borrowIndex);
+  if (healthyAt(target.collateral, debt, PAPER_CONFIG.liquidationThresholdBps, prices)) throw new CairnError("PositionHealthy");
+  const maxRepay = mulDivCeil(debt, PAPER_CONFIG.closeFactorBps, BPS_DENOM);
+  if (amount > maxRepay) throw new CairnError("RepayTooLarge");
+  const removed = sharesForRepayment(amount, target.debtShares, market.borrowIndex);
+  if (removed === 0n) throw new CairnError("RepayTooSmall");
+  const bonusSeize = collateralForLiquidation(
+    amount, EQUITY_DECIMALS, COLLATERAL_DECIMALS, prices.equityDebt, prices.collateral, PAPER_CONFIG.liquidationBonusBps,
+  );
+  const seize = bonusSeize < target.collateral ? bonusSeize : target.collateral;
+  if (seize === 0n) throw new CairnError("LiquidationTooSmall");
+  return {
+    market: {
+      ...market,
+      cash: market.cash + amount,
+      totalDebtShares: market.totalDebtShares - removed,
+      totalCollateral: market.totalCollateral - seize,
+    },
+    target: { collateral: target.collateral - seize, debtShares: target.debtShares - removed },
+    seize,
+  };
+}
+
+export function liquidationLimits(state: PaperState, target: Position) {
+  const market = accrued(state.market, state.now);
+  const prices = pricesFor(state.equityPrice);
+  const debt = debtForShares(target.debtShares, market.borrowIndex);
+  const liquidatable = debt > 0n && !healthyAt(target.collateral, debt, PAPER_CONFIG.liquidationThresholdBps, prices);
+  return { debt, liquidatable, maxRepay: mulDivCeil(debt, PAPER_CONFIG.closeFactorBps, BPS_DENOM) };
+}
+
+// The user acts as the liquidator of the sample market maker: pays SPYx, takes USDC plus the bonus.
+export function liquidateSample(state: PaperState, amount: bigint): PaperState {
+  // The program checks health and the close factor before the SPYx transfer, so the same order here.
+  const { market, target, seize } = liquidateCore(state, state.sample, amount);
+  const spyx = spend(state.wallet.spyx, amount, "SPYx");
+  const next = { ...state, market, sample: target, wallet: { ...state.wallet, spyx, usdc: state.wallet.usdc + seize } };
+  return log(next, "liquidate", `You repaid ${fmt(amount, 8)} SPYx of the sample borrower's debt and took ${fmt(seize, 6, 2)} USDC of its collateral.`, amount);
+}
+
+// A sample liquidator repays the maximum the close factor allows on YOUR position.
+export function liquidateOwn(state: PaperState): PaperState {
+  const { maxRepay } = liquidationLimits(state, state.position);
+  const { market, target, seize } = liquidateCore(state, state.position, maxRepay);
+  const next = { ...state, market, position: target };
+  return log(next, "liquidate", `A liquidator repaid ${fmt(maxRepay, 8)} SPYx of your debt and took ${fmt(seize, 6, 2)} USDC of your collateral.`);
 }
 
 export function exchangeRate(market: MarketState) {
@@ -303,19 +391,19 @@ export function exchangeRate(market: MarketState) {
 // Everything the page shows, derived from market state only.
 export type MarketView = ReturnType<typeof viewOf>;
 
-export function viewOf(market: MarketState, position: Position, wallet: Wallet, config = PAPER_CONFIG) {
+export function viewOf(market: MarketState, position: Position, wallet: Wallet, config = PAPER_CONFIG, prices = PRICES) {
   const debt = totalDebt(market);
   const assets = managedAssets(market.cash, debt, market.reserves);
   const utilization = utilizationBps(market.cash, debt);
   const borrowRate = borrowRateBps(config, utilization);
   const positionDebt = debtForShares(position.debtShares, market.borrowIndex);
-  const collateralValue = tokenValue(position.collateral, COLLATERAL_DECIMALS, PRICES.collateral);
-  const debtValue = tokenValue(positionDebt, EQUITY_DECIMALS, PRICES.equityDebt);
+  const collateralValue = tokenValue(position.collateral, COLLATERAL_DECIMALS, prices.collateral);
+  const debtValue = tokenValue(positionDebt, EQUITY_DECIMALS, prices.equityDebt);
   // Largest extra borrow that still passes position_is_healthy at the LTV.
   const limitValue = (collateralValue * config.loanToValueBps) / 10_000n;
   const headroomValue = limitValue > debtValue ? limitValue - debtValue : 0n;
   // Two base units of margin absorb the ceil in debt_for_shares and the floor in token_value.
-  const rawMax = (headroomValue * 10n ** BigInt(EQUITY_DECIMALS)) / PRICES.equityDebt;
+  const rawMax = (headroomValue * 10n ** BigInt(EQUITY_DECIMALS)) / prices.equityDebt;
   const maxBorrowByHealth = rawMax > 2n ? rawMax - 2n : 0n;
   const maxBorrow = maxBorrowByHealth < market.cash ? maxBorrowByHealth : market.cash;
   return {

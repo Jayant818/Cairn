@@ -40,6 +40,12 @@ opens in **paper mode**. You need no wallet, no RPC, and no funds.
 - Custom amounts and the borrower side (post USDC, borrow, repay, withdraw)
   are under **Try the borrower side and custom amounts**. Each action says why
   it cannot run before you click.
+- **Liquidation:** a paper oracle moves the SPYx price (−10%, +10%, +25%). Debt is
+  in SPYx and collateral is in USDC, so a price rise pushes borrowers toward the
+  70% liquidation threshold. Then a liquidator can act on your position, or you
+  can liquidate the sample borrower under **Liquidate** and take USDC plus the
+  5% bonus. Health, the close-factor cap, and the seize amount follow
+  `liquidate` in `lib.rs`.
 - The program's errors appear as the program reports them. Examples: a borrow
   above the loan-to-value limit fails with `UnhealthyPosition`, and a redemption
   above idle cash fails with `InsufficientLiquidity`.

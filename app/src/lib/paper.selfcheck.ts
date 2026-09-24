@@ -29,6 +29,11 @@ import {
   repay,
   viewOf,
   withdrawCollateral,
+  liquidateOwn,
+  liquidateSample,
+  liquidationLimits,
+  movePrice,
+  pricesFor,
   type PaperState,
 } from "./paperMarket";
 import { guideOf } from "./guide";
@@ -134,4 +139,32 @@ eq(crowded.market.cash, cash, "failed redeem left state untouched");
   eq(genesisState(false).market.receiptSupply, 0n, "variant B starts empty");
 }
 
-console.log("paper selfcheck PASS: 5 math.rs vectors, 6 rounding vectors, lifecycle, LTV, repay and liquidity guards, guided path");
+// Liquidation follows lib.rs: healthy positions are refused, the repay is capped by the close
+// factor, and the seize is collateral_for_liquidation at the adverse oracle prices, with the bonus.
+{
+  let q: PaperState = genesisState();
+  rejects(() => liquidateSample(q, 1n * SPYX), "PositionHealthy", "healthy sample borrower cannot be liquidated");
+  q = movePrice(q, 50n);
+  const limits = liquidationLimits(q, q.sample);
+  eq(limits.liquidatable, true, "a +50% SPYx move makes the sample borrower liquidatable");
+  rejects(() => liquidateSample(q, limits.maxRepay + 1n), "RepayTooLarge", "repay above the close factor");
+  const before = q.wallet.usdc;
+  const repayAmt = 10n * SPYX;
+  const expected = collateralForLiquidation(repayAmt, 8, 6, pricesFor(q.equityPrice).equityDebt, pricesFor(q.equityPrice).collateral, PAPER_CONFIG.liquidationBonusBps);
+  q = liquidateSample(q, repayAmt);
+  eq(q.wallet.usdc - before, expected, "liquidator receives collateral_for_liquidation");
+  eq(q.wallet.spyx, 15n * SPYX, "liquidator paid 10 SPYx");
+
+  // Your own max borrow is healthy at 50% LTV (health 1.4) and falls under 1 after +50%.
+  let own: PaperState = depositCollateral(genesisState(), 10_000n * USDC);
+  const max = viewOf(own.market, own.position, own.wallet).maxBorrow;
+  own = borrow(own, max);
+  rejects(() => liquidateOwn(own), "PositionHealthy", "own healthy position cannot be liquidated");
+  own = movePrice(own, 50n);
+  const debtBefore = liquidationLimits(own, own.position).debt;
+  own = liquidateOwn(own);
+  if (!(liquidationLimits(own, own.position).debt < debtBefore)) throw new Error("own liquidation did not cut debt");
+  if (!(own.position.collateral < 10_000n * USDC)) throw new Error("own liquidation did not seize collateral");
+}
+
+console.log("paper selfcheck PASS: 5 math.rs vectors, 6 rounding vectors, lifecycle, LTV, repay and liquidity guards, guided path, liquidation");
